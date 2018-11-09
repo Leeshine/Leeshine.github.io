@@ -140,6 +140,265 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-rgw-multi-site" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2018/11/09/rgw-multi-site/">rgw-multisite概述</a>
+    </h1>
+  
+
+        
+        <a href="/2018/11/09/rgw-multi-site/" class="archive-article-date">
+  	<time datetime="2018-11-09T13:17:40.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-09</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>rgw-multisite主要涉及涉及到三种日志：</p>
+<ul>
+<li>metadata log</li>
+<li>data log</li>
+<li>bucket index log</li>
+</ul>
+<h3 id="基本概念"><a href="#基本概念" class="headerlink" title="基本概念"></a>基本概念</h3><ul>
+<li>zone：每个zone都是独立的ceph集群，包含osd、mon、rgw等，不会跨集群，A <em>zone</em> in the RGW multisite system is a set of radosgw daemons serving the same data, backed by the same set of RADOS pools in Ceph（由一组rgw提供服务，对应一组后台的pool）</li>
+<li>zonegroup：可以包含多个zone，zone之间同步元数据和数据，其中只有master zone能修改元数据</li>
+<li>realm：独立命名空间，可以包含zonegroup，zonegroup之间同步元数据，只有master zonegroup能修改元数据，用以支持在同一组集群中运行不同配置</li>
+<li>period：拥有唯一id和epoch，用以保持当前realm的状态，每个realm都有当前关联的period以及一组按照时间顺序排列的period</li>
+<li>user：user在realm里是全局唯一的</li>
+<li>bucket：在realm里是全局唯一的，且只属于一个zonegroup</li>
+<li>A sync module is a set of callbacks that are called for each change that happens in data (and potentially in metadata, e.g., bucket creation, new user, etc.; note: object’s metadata change is regaded as change in data) in a single zone-group. sync module是针对底层数据变化实现的一系列回调，每个zone都有一个对应的sync module，这个sync module决定了这个对应的zone能否导出数据</li>
+</ul>
+<h3 id="日志格式"><a href="#日志格式" class="headerlink" title="日志格式"></a>日志格式</h3><h1 id="核心机制"><a href="#核心机制" class="headerlink" title="核心机制"></a>核心机制</h1><h3 id="集群配置同步（realm-sync）"><a href="#集群配置同步（realm-sync）" class="headerlink" title="集群配置同步（realm sync）"></a>集群配置同步（realm sync）</h3><ul>
+<li>变更极致类似于git，需要update后再提交才能被其他节点感知，首次使用时需要通过pull命令来获取更新，之后的推送是主动的（RGWPeriodPusher实现了RGWRealmWatcher接口）</li>
+<li>RGWPeriodPusher：与其他节点一起通过realm watcher 来推送period的更新</li>
+</ul>
+<h3 id="元数据同步-（meta-sync）"><a href="#元数据同步-（meta-sync）" class="headerlink" title="元数据同步 （meta sync）"></a>元数据同步 （meta sync）</h3><ul>
+<li>元数据同步和数据同步分为全局同步和增量同步，元数据的修改只能发生在master zone上，更新的过程就是通过radosgw admin api来获取metadata log，并更新对应marker</li>
+</ul>
+<h3 id="数据同步（data-sync）"><a href="#数据同步（data-sync）" class="headerlink" title="数据同步（data sync）"></a>数据同步（data sync）</h3><ul>
+<li>更新的过程就是通过RGW Admin API来获取bilog，并更新对应的marker，从日志处获取信息差异后请求对方zone已变化数据的元数据信息，并调用底层module的相关接口</li>
+<li>zone_data sync status ：init 、 full_sync 、 incremental<ul>
+<li>bucket_instance_state: full_sync 、 incremental</li>
+</ul>
+</li>
+<li>执行流程（RGWDataSyncCR）：<ul>
+<li>RGWReadDataSyncStatusCoroutine：获取对应zone的同步状态<ul>
+<li>从log-pool中获取datalog.sync-status.{source-zone-id}，该obejct存储了同步状态(<strong>State</strong>)以及日志分片数（state、num_shards）</li>
+<li>处理每个日志分片，从log-pool中获取datalog.sync-status.shard.{source-zone-id}.X，该object存储了同步阶段，以及同步的marker</li>
+</ul>
+</li>
+<li>若<strong>State</strong> 为<strong>StateInit</strong>，RGWInitDataSyncStatusCoroutine<ul>
+<li>锁住datalog.sync-status.{source-zone-id}，并创建一个新的object，创建完成之后再锁住</li>
+<li>处理每个日志分片，读取remote pool（rgw.log），remote-obj（data_logX）并保存shards_info[X]</li>
+<li>对上步获取到的信息shards_info，存入本地集群中local pool(rgw.log)，local obj（datalog.sync-status.shard.{source-zone-id}.X）</li>
+<li>将状态改变为<strong>StateBuildingFullSyncMaps</strong>（修改前文锁住的object并解锁）</li>
+</ul>
+</li>
+<li>若<strong>State</strong> 为<strong>StateBuildingFullSyncMaps</strong>，RGWListBucketIndexesCR<ul>
+<li>创建entries_index（RGWShardedOmapCRManager），local pool(rgw.log), objects( data.full-sync.index.{source-zone-id}.0，。。)obj数等于bucket分片数</li>
+<li>从remote zone处获取bucket instances（RGWReadRESTResourceCR）</li>
+<li>对于上步获取的每个bucket instance，获取详细信息（RGWReadRESTResourceCR ），详细信息包括：num_shards、name of bucket、index pool、data pool。。，对于每个bucket分片<ul>
+<li>将key（ {bucket-name-A}:{source-zone-id}.4133.1），value（empty）写入前文entries_index obj 处</li>
+</ul>
+</li>
+<li>对于每个日志分片X，有[bucket，shard]对应与X，该对应关系被写入日志中</li>
+</ul>
+</li>
+<li>若<strong>State</strong> 为<strong>StateSync</strong>，对每个日志分片X分别处理（ RGWDataSyncShardControlCR-》RGWDataSyncShardCR）<ul>
+<li>​</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h1 id="插件机制"><a href="#插件机制" class="headerlink" title="插件机制"></a>插件机制</h1><h3 id="sync-plugin"><a href="#sync-plugin" class="headerlink" title="sync plugin"></a>sync plugin</h3><ul>
+<li>data sync module：获取数据并写入本地，支持数据导出</li>
+<li>log sync module：获取数据的扩展属性，不支持数据导出</li>
+<li>elasticsearch module：获取同步数据的元数据信息</li>
+</ul>
+<h1 id="公有云同步"><a href="#公有云同步" class="headerlink" title="公有云同步"></a>公有云同步</h1><h2 id="数据同步机制-data-sync"><a href="#数据同步机制-data-sync" class="headerlink" title="数据同步机制(data sync)"></a>数据同步机制(data sync)</h2><h2 id="Multi-site-同步示例"><a href="#Multi-site-同步示例" class="headerlink" title="Multi-site 同步示例"></a>Multi-site 同步示例</h2><p>本文环境中分为source site 和 secondarysite两个集群，在source site上修改bucket中的数据，在secondary site上观察数据同步状态</p>
+<h3 id="数据机制浅析"><a href="#数据机制浅析" class="headerlink" title="数据机制浅析"></a>数据机制浅析</h3><p>/<strong><strong><strong><strong>**</strong></strong></strong></strong> remote site <strong>***</strong>/</p>
+<p>涉及到的存储池：</p>
+<ul>
+<li><strong>{source-zone}.rgw.data.root</strong>：存储bucket instances</li>
+<li><strong>{source-zone}.rgw.buckets.data</strong>：存储Objects</li>
+<li><strong>{source-zone}.rgw.buckets.index</strong>：存储bucket对应的index objcet（与bucket index 的分片数有关）</li>
+<li><strong>{source-zone}.rgw.log</strong>：存储修改日志（与日志分片数有关）</li>
+</ul>
+<p>注意：总共有两种分片，分别为bucket shard ， log shard</p>
+<p>将bucket 分片与日志分片做映射，假设测试环境中有3个bucket（bucket-0,bucket-1,bucket-2），bucket的分片数为3（rgw_override_bucket_index_max_shards=3），日志分片数为4（rgw_data_log_num_shards=4），那么需要将9个bucket shard 与4个log shard 做映射，之后针对每个bucket  shard 的修改都会记录到对应的log shard 之上，下面以objcet的写入为例来分析数据同步流程：</p>
+<p>假设将OBJ_test 写入bucket-0 shardS中，该bucket shard 对应与 log shardX，则流程如下:</p>
+<p>1) 将OBJ_test写入pool（{source-zone}.rgw.buckets.data）中</p>
+<p>2) 将修改信息写入pool（{source-zone}.rgw.buckets.index）的obj（.dir.{key-of-bucket-0}.S）的omap属性中：</p>
+<p>​    &lt;OBJ_test， 基本元信息&gt;，&lt;.0_00000000001.4.2，_ write OBJ_444 state=CLS_RGW_STATE_PENDING_MODIFY_&gt;，&lt;.0_00000000002.5.3，write OBJ_444 state=CLS_RGW_STATE_COMPLETE&gt;</p>
+<p>之后在omap的header中记录值 0_00000000002.5.3</p>
+<p>3) 将修改信息写入pool （{source-zone}.rgw.log）的obj（data_log.X）的omap属性中：</p>
+<p>1_1489979397.374156_23.1 =》some info like bucket-B shardS has modification, timestamp</p>
+<p>之后再omap的header中记录值1_1489979397.374156_23.1</p>
+<p>总结来说，当在某个bucket做了数据修改时，所做的修改都会以kv的形式记录在对应的obj的omap中，其中k为系统生成的有序的marker，v为对应的一些元数据信息，同时在omap的header中会记录最近的一个marker</p>
+<h3 id="实例"><a href="#实例" class="headerlink" title="实例"></a>实例</h3><h3 id="代码分析"><a href="#代码分析" class="headerlink" title="代码分析"></a>代码分析</h3><p>本文接上文，对multi-site中数据同步的部分代码做分析，环境还是分为source-zone和 secondary-zone两个zone分别对应两个seal集群，实验过程中在source-zone上写入object，在secondary-zone上观察数据同步状态 。</p>
+<p>RGWDataSyncCR为实际执行数据同步的入口协程，因为本文主要以该类为起点来分析multi-site中数据增量同步（inc_sync）的过程。multi-site的实现中在boost::asio::coroutine的基础之上封装了一个协程库，在该库之上使用了大量协程来完成数据的同步。下面以secondary-zone为视角来分析数据同步过程。</p>
+<p>RGWDataSyncCR:</p>
+<ol>
+<li><p>RGWReadDataSyncStatusCoroutine：</p>
+<p>从本地集群中获取远端集群数据同步状态（“state”）和日志分片数（“num_shards”），并存入到sync_status.sync_info中，对于远端集群的每个日志分片data-log-shard X，从本地集群中读取该分片同步状态(full-sync inc-sync)、marker、next_step_marker、timestamp这些信息，并存入sync_status-&gt;sync_markers[X]中:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">local-pool: &#123;secondary-zone&#125;.rgw.log</span><br><span class="line">local-obj: datalog.sync-status.&#123;remote-zone-id&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>如果1中获取的”state”为”StateInit“，RGWInitDataSyncStatusCoroutine：</p>
+<p>  2.1 锁住 datalog.sync-status.{remote-zone-id} 这个object</p>
+<p>  2.2 重新创建这个object（ datalog.sync-status.{remote-zone-id}）</p>
+<p>  2.3 再次锁住这个object</p>
+<p>  2.4 对于每个日志分片data-log-shard X，从远程集群中</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">remote-pool: &#123;source-zone&#125;.rgw.log</span><br><span class="line">remote-obj: data-log.X</span><br></pre></td></tr></table></figure>
+<p>获取该日志分片的信息，写入shards_info[x]，之后将shards_info[x]写入本地集群中</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">local-pool : &#123;secondary-zone&#125;.rgw.log </span><br><span class="line">local-obj :  datalog.sync-status.shard.&#123;source-zone-id&#125;.X</span><br></pre></td></tr></table></figure>
+<p>经过这步之后，日志分片的映射情况如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">source-zone                   secondary-zone</span><br><span class="line">data_log.0     ======&gt;    datalog.sync-status.shard.&#123;source-zone-id&#125;.0</span><br><span class="line">......</span><br><span class="line">   data_log.X     ======&gt;    datalog.sync-status.shard.&#123;source-zone-id&#125;.X</span><br></pre></td></tr></table></figure>
+<ol start="2">
+<li>5 将数据同步状态设置为”StateBuildingFullSyncMaps”，同时写入本地集群 datalog.sync-status.{remote-zone-id} 这个object中，并将该object解锁</li>
+</ol>
+</li>
+<li><p>如果1.1中获取的”state”为“StateBuildingFullSyncMaps”，RGWListBucketIndexesCR：</p>
+<p>注：如果是在source-zone和secondary-zone都为空的时候配置multi-site，步骤3不做任何事，因为在build full sync map的时候没有任何数据</p>
+<p>  3.1 创建entries_index（ RGWShardedOmapCRManage），用于管理建立full sync map过程中本地的一些obj</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">local-pool: &#123;secondary-zone&#125;.rgw.log</span><br><span class="line">local-obj: data.full-sync.index.&#123;remote-zone-id&#125;.0</span><br><span class="line">			data.full-sync.index.&#123;remote-zone-id&#125;.1</span><br><span class="line">			...</span><br><span class="line">			data.full-sync.index.&#123;remote-zone-id&#125;.N, N = rgw_data_log_num_shards</span><br></pre></td></tr></table></figure>
+<p>由上可知，每个本地的data.full-sync.index object对应于远端集群的一个data_log，下面则需要同步远端bucket的信息，并将bucket分片与本地的data.full-sync.index object建立对应关系</p>
+<p>  3.2 调用RGWReadRESTResourceCR从source zone处获取所有bucket instance</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">remote-pool : &#123;source-zone&#125;.rgw.data.root</span><br><span class="line">remote-obj: .bucket.meta.&#123;bucket-name-A&#125;:&#123;remote-zone-id&#125;.4133.1</span><br><span class="line">			.bucket.meta.&#123;bucket-name-B&#125;:&#123;remote-zone-id&#125;.4139.2</span><br><span class="line">			.bucket.meta.&#123;bucket-name-C&#125;:&#123;remote-zone-id&#125;.4138.3</span><br><span class="line">			....</span><br></pre></td></tr></table></figure>
+<p> 3.3 对于3.2步中获取的每个bucket instance（例如 {bucket-name-A}:{remote-zone-id}.4133.1）调用RGWReadRESTResourceCR 获取该bucket的详细信息，包括：bucket分片数（即该bucket的index分片数）、bucket的名字、index pool、data pool等，对于每个bucket分片，做如下处理（以分片i为例）：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"># 假设分片i映射到了日志分片data_log.X上</span><br><span class="line">set omap (key:&#123;bucket-name-A&#125;:&#123;source-zone_id&#125;.4133.1 val:empty)</span><br><span class="line">to local obj(local-pool: &#123;secondary-zone&#125;.rgw.log, local-obj:data.full-sync.index.&#123;remote-zone-id&#125;.X)</span><br></pre></td></tr></table></figure>
+<p>最后，data.full-sync.index.{remote-zone-id}.X上记录了对应的remote-zone上的bucket 分片，例如：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"># rados -p &#123;zone&#125;.rgw.log listomapkeys data.full-sync.index.&#123;remote-zone-id&#125;.3</span><br><span class="line"> testbuckAAA:900d449b-3c56-4949-8b88-bc8a6d4ee3b1.4122.1:1</span><br><span class="line"> testbuckAAA:900d449b-3c56-4949-8b88-bc8a6d4ee3b1.4122.1:5</span><br><span class="line"> testbuckBBB:900d449b-3c56-4949-8b88-bc8a6d4ee3b1.4123.2:1</span><br><span class="line"> testbuckBBB:900d449b-3c56-4949-8b88-bc8a6d4ee3b1.4123.2:5</span><br><span class="line"> testbuckCCC:900d449b-3c56-4949-8b88-bc8a6d4ee3b1.4124.3:1</span><br><span class="line"> testbuckCCC:900d449b-3c56-4949-8b88-bc8a6d4ee3b1.4124.3:5</span><br><span class="line"> 这就是说：</span><br><span class="line">  testbuckAAA, shard1</span><br><span class="line">  testbuckAAA, shard5</span><br><span class="line">  testbuckBBB, shard1</span><br><span class="line">  testbuckBBB, shard5</span><br><span class="line">  testbuckCCC, shard1</span><br><span class="line">  testbuckCCC, shard5</span><br><span class="line">  这几个bucket分片被映射到data_log.X这个分片上</span><br></pre></td></tr></table></figure>
+<p> 3.4 对于每个日志分片data_log.X，记录被映射到这个日志分片上的bucket 分片数量：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">local-pool :  &#123;secondary-zone&#125;.rgw.log</span><br><span class="line">local-obj : datalog.sync-status.shard.&#123;remote-zone-id&#125;.X</span><br></pre></td></tr></table></figure>
+<p>​</p>
+</li>
+<li><p>如果1中获取的”state”为“StateSync”，对于每个日志分片 data-log-shard X，调用RGWDataSyncShardCR::incremental_sync来进行增量同步：</p>
+<p>   4.2 创建set_marker_tracker（RGWDataSyncShardMarkerTrack），用来记录一个bucket shard是否在流程中和更新一个marker</p>
+<ol start="5">
+<li><p>5 读取远端集群中data-log.X这个object的omap header，header中包含的信息由max_marker，max_time， 如果读取的max_marker比本地记录的marker更旧的话，那么此次增量同步结束</p>
+<p>4.6 如果读取的max_marker比本地记录的marker更新的话，从远端集群中的data-log.X中读取这个object的omap kv对（每个kv对为一个entry），从RGWDataChangesLog::add_entry方法中可以看出这些kv对是如何组成的：</p>
+</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1_1489653363.684562_381.1 =&gt; some info including bucke-tname, bucked-id, bucket-shard, modification timestamp</span><br><span class="line">1_1489653363.684562_381.1这个key是在 cls/log/cls_log.cc:cls_log_add中根据时间戳生成的</span><br></pre></td></tr></table></figure>
+<p>对于一个bucket的任何修改都会生成一个这样的kv对存储在对应的日志分片上，因此扫描一个日志分片data_log.X的话，结果如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"># rados -p &#123;source-zone&#125;.rgw.log listomapkeys data_log.X</span><br><span class="line"> 1_1490768507.881727_3.1 =&gt; some info like bucket-2 shard3 has modification timestamp1</span><br><span class="line"> 1_1490768519.257779_4.1 =&gt; some info like bucket-5 shard1 has modification timestamp2</span><br><span class="line"> 1_1490768527.759371_5.1 =&gt; some info like bucket-1 shard4 has modification timestamp3</span><br><span class="line"> 1_1490768541.378290_6.1 =&gt; some info like bucket-6 shard0 has modification timestamp4</span><br><span class="line"> ......</span><br></pre></td></tr></table></figure>
+<p>  4.7 对于4.6中返回的每个entry，如果它还没有在处理流程中（由4.2中创建的marker_tracker判断），则通过协程RGWDataSyncSingleEntryCR来处理每个entry：</p>
+<ul>
+<li>解析该entry从而获取bucket_name和bucket_shard_id</li>
+</ul>
+<ul>
+<li><p>调用协程RGWRunBucketSyncCoroutine来处理该bucket shard的数据同步：</p>
+<ul>
+<li><p>a) 调用协程RGWReadBucketSyncStatusCoroutine从本地集群中读取对应object的xattrs（包含的信息有：full_marker、inc_marker、lock.sync_lock、lock.sync_lock.incremental、state等）</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">local-pool : &#123;secondary-zone&#125;.rgw.log</span><br><span class="line">local-obj : bucket.sync-status.&#123;remote-zone-id&#125;:&#123;bucketname&#125;:&#123;bucket_id&#125;:&#123;shard_id&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>b) 调用协程RGWGetBucketInstanceInfoCR从本地集群中读取bucket instance的信息</p>
+</li>
+<li><p>c) 如果步骤a中获取的state为rgw_bucket_shard_sync_info::StateInit（与步骤1中获取的状态不同，步骤一种状态为rgw_data_sync_info::StatInit），调用协程 RGWInitBucketShardSyncStatusCoroutine从远端集群中读取对应的bucket index log 的相关信息写入本地集群中，同时将状态置为”StateFullSync”</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">remote-pool : &#123;source-zone&#125;.rgw.buckets.index</span><br><span class="line">remote-obj : .dir.&#123;key-of-bucket-B&#125;.S</span><br><span class="line"></span><br><span class="line">local-pool : &#123;secondary-zone&#125;.rgw.log</span><br><span class="line">local-obj : bucket.sync-status.&#123;remote-zone-id&#125;:&#123;bucketname&#125;:&#123;bucket_id&#125;:&#123;shard_id&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>d) 如果步骤a中获取的state为StateFullSync，调用协程RGWBucketShardFullSyncCR将状态置为“ StateIncrementalSync”</p>
+</li>
+<li><p>e)如果步骤a中获取的状态为StateIncrementalSync，调用RGWBucketShardIncrementalSyncCR：</p>
+<ul>
+<li><p>调用RGWListBucketIndexLogCR从远端集群中获取bucket分片的相关信息（omap kv对)：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">remote-pool: &#123;source_zone&#125;.rgw.buckets.index</span><br><span class="line">remote-obj : .dir.&#123;key-of-bucket-B&#125;.S</span><br></pre></td></tr></table></figure>
+<p>对于每个kv对，调用RGWBucketSyncSingleEntryCR来对对应的object进行同步：</p>
+<ul>
+<li><p>若这个kv对应的操作没有完成（op_state != CLS_RGW_STATE_COMPLETE），则跳过</p>
+</li>
+<li><p>若对应的操作已完成（op_state == CLS_RGW_STATE_COMPLETE），则根据具体的操作类型调用RGWDefaultDataSyncModule中的具体方法来实现对该object的操作，具体的方法包括：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sync_object: 将远端object同步到本地集群中</span><br><span class="line">remove_object: 将objcet从本地集群中删除</span><br><span class="line">create_delete_marker: 对于开启了version功能的bucket，给对应的object创建一个删除标记，而不是直接删除该object</span><br></pre></td></tr></table></figure>
+<p>​</p>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<p>rgw_admin.cc::get_data_sync_status分析</p>
+<ul>
+<li>RGWDataSyncStatusManager::init():<ul>
+<li>source_log.init ： 初始化source zone的data_log</li>
+<li>source_log.read_log_info：获取source zone的data_log数目</li>
+</ul>
+</li>
+<li>RGWRemoteDataLog::read_sync_status()，将读取结果存储到sync_status中<ul>
+<li>RGWReadDataSyncStatusCoroutine<ul>
+<li>RGWSimpleRadosReadCR&lt;rgw_data_sync_info&gt;：获取sync info</li>
+<li>RGWReadDataSyncStatusMarkersCR：获取日志分片的marker</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>从sync_status中读取同步状态（init、preparing for full sync 、syncing），计算full sync、inc sync的分片数目</li>
+<li>RGWRemoteDataLog::read_source_log_shards_info()：统计尚未同步的分片数，获取最近的已同步的修改点</li>
+</ul>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">ceph</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2018/11/09/rgw-multi-site/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-paxos-introduction" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
   <div class="article-inner">
     
