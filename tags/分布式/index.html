@@ -6,13 +6,13 @@
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <link rel="dns-prefetch" href="http://yoursite.com">
-  <title>Leesine&#39;s Blog</title>
+  <title>Tag: 分布式 | Leesine&#39;s Blog</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="description" content="Stay Hungry, Stay Foolish">
 <meta name="keywords" content="test">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Leesine&#39;s Blog">
-<meta property="og:url" content="http://yoursite.com/index.html">
+<meta property="og:url" content="http://yoursite.com/tags/分布式/index.html">
 <meta property="og:site_name" content="Leesine&#39;s Blog">
 <meta property="og:description" content="Stay Hungry, Stay Foolish">
 <meta property="og:locale" content="default">
@@ -140,87 +140,34 @@
           <div id="js-content" class="content-ll">
             
   
-    <article id="post-paxos-introduction" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
-  <div class="article-inner">
+  
     
-      <header class="article-header">
-        
+    
+      
+      
+      <section class="archives-wrap">
+        <div class="archive-year-wrap">
+          <a href="/archives/2018" class="archive-year">2018</a>
+        </div>
+        <div class="archives">
+    
+    <article class="archive-article archive-type-post">
+  <div class="archive-article-inner">
+    <header class="archive-article-header">
+      	<div class="article-meta">
+	      	<a href="/2018/11/09/paxos-introduction/" class="archive-article-date">
+  	<time datetime="2018-11-09T13:02:11.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-09</time>
+</a>
+        </div>
+    	 
   
     <h1 itemprop="name">
-      <a class="article-title" href="/2018/11/09/paxos-introduction/">PAXOS简介</a>
+      <a class="archive-article-title" href="/2018/11/09/paxos-introduction/">PAXOS简介</a>
     </h1>
   
 
-        
-        <a href="/2018/11/09/paxos-introduction/" class="archive-article-date">
-  	<time datetime="2018-11-09T13:02:11.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-09</time>
-</a>
-        
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <h2 id="推导过程"><a href="#推导过程" class="headerlink" title="推导过程"></a>推导过程</h2><p>对于一致性算法来说，安全性要求如下：</p>
-<ul>
-<li>只有被提出的方案才能被选定（chosen）</li>
-<li>只有一个值能被选定</li>
-<li>进程不会学习某个方案，除非这个方案真正被选定了</li>
-</ul>
-<p>Paxos就是一个满足上述需求的一致性算法，它的目标是确保最终有一个方案能被选定，然后被所有进程学习，Paxos中有三种角色：<code>proposers</code> , <code>acceptors</code>, <code>learners</code>，所有的角色都能互通信，并由如下前提：</p>
-<ul>
-<li>agent以不固定速度运行，可能会停止或者重启。因为即使一个提案被选定了，agent也可能重启，因此被选定的提案能持久化存储，否则无法确定最终的值</li>
-<li>消息在传输过程中可能会丢失、重复，等内容不会被篡改</li>
-</ul>
-<p>首先，即使只有一个提案被提出，我们仍要确保最终有一个方案会被选定，这就暗示这如下需求：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P1: 一个Acceptor必须批准它接收到的第一个提案</span><br></pre></td></tr></table></figure>
-<p>但是这个需求会引出新的问题：如果有多个提案被多个Proposer同时提出，会导致每个Acceptor都批准了一个提案，但没有哪个提案被多数派批准。因此在P1基础上，为了确保最终有提案能被多数派批准，这就意味着一个Acceptor必须能批准不止一个提案，我们使用一个全局唯一的编号来唯一标识每一个被Acceptor批准的提案，此时可以用<code>[编号，value]</code>来表示一个提案，当一个提案被多数派批准之后，我们就说这个提案被选定了（chosen）。我们可以允许多个提案被选定，但是我们必须确保被选定的提案都具有相同的值，即有如下需求：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2: 如果一个值为V的提案被选定了，那么被选定(chosen)的更高编号的提案的值也必须为V</span><br></pre></td></tr></table></figure>
-<p>因为编号是全局有序递增的，这样才能确保最终只有一个值能被选定。一个提案被选定意味它至少被一个Acceptor批准，因此我们可以满足如下条件来满足P2：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2a: 如果一个值为V的提案被选定了，那么被批准(accept)的更高编号的提案的值也必须为V</span><br></pre></td></tr></table></figure>
-<p>此时，我们仍需满足P1，但因为通信是异步的，一个提案（[M0, V0]）可能会在某个Acceptor还未收到任何提案时就被选定了，如果此时某个Proposer产生了一个编号更高，值不为V0提案（[M1, V1], M1&gt;M0, V1 != V0）发送至该Acceptor，那么该提案就会被批准，但这会与P2a相矛盾，因此对P2a进行强化如下：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2b: 如果一个值为V的提案被选定了，那么之后任何Proposer产生的编号更高的提案，其值都必须为V</span><br></pre></td></tr></table></figure>
-<p>因此我们满足P2b即可满足P2。接下来我们来讨论如何满足P2b，即如何满足<code>在[M0, V0]被选定时,所有编号Mn &gt; M0的提案，其值也为V0</code>。只需要满足如下约束即可：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">P2c: 如果提案[Mn, Vn]被提出，那么肯定存在一个由半数以上Acceptor组成的集合S，满足如下两个条件之一：</span><br><span class="line">- S中的所有Acceptor都没有批准过编号小于Mn的提案</span><br><span class="line">- S中所有Acceptor批准的最大编号的提案的值为Vn</span><br></pre></td></tr></table></figure>
-<p>下面我们来证明P2c成立的话，P2b也一定成立。我们可以使用第二数学归纳法来证明，即首先假设提案[M0, V0]被选定了，证明过程如下：</p>
-<ol>
-<li>当Mn = M0 + 1时，因为M0已经被选定了，那么肯定不存在一个多数派集合S，其中所有Acceptor都没有批准过编号小于Mn的提案，即P2c中第一个条件肯定不成立了，所以肯定存在多数派Acceptor集合S1，其批准的最大编号的提案只为Vn，因为M0被选定了，所有肯定存在多数派Acceptor集合C，C中每个Acceptor都批准了M0这个提案，因为C与S1必然有交集，所以S1中最大编号的提案一定为M0，所以此时Vn必然等于V0</li>
-<li>根据第二数学归纳法，假设编号M0+1 值Mn-1 范围内的所有提案值都为V0，那么如何证明Mn提案的值也为V0呢？根据P2c，肯定存在一个多数派集合S，S中的Acceptor批准了编号小于Mn的提案，且它批准的最大编号的提案的值肯定为Vn，假设这个最大编号落在[M0+1, Mn-1]区间内，则Vn肯定等于V0，若不在这个区间内，那最大编号肯定为M0，此时Vn也肯定等于V0</li>
-</ol>
-<p>由此可证明，在P2c的约束条件下，P2b是成立的。从上可看到，从P1到P2c的过程其实是一系列条件的加强，由P2c进行反向推导就可保证P2的成立。将条件逐步加强后，就可以推导出提案的生成步骤了，下面我们来看应该如何满足P2c。</p>
-<h2 id="提案流程"><a href="#提案流程" class="headerlink" title="提案流程"></a>提案流程</h2><h3 id="Proposer生成提案"><a href="#Proposer生成提案" class="headerlink" title="Proposer生成提案"></a>Proposer生成提案</h3><p>下面来看在P2c的基础上如何来生成提案。对于Proposer来说，学习已经被批准或即将批准的提案肯定比预测未来被批准的提案更容易，因此，Proposer在生成提案N时，它需要学习这样一个提案M，M被多数派Acceptor批准且M为小于N中提案中编号最大的提案（如果这个提案存在的话）。既然预测未来提案较难，Proposer可以采取一些方法来反正其他提案（值不相同）被批准，Paxos中采用的方法就是Proposer会要求Acceptor不再批准编号小于N的提案，这就引出了如下提案生成算法：</p>
-<p>1.<strong>Prepare阶段</strong><br>Proposer获取一个提案编号N，然后向某个多数派Acceptor集合发出请求，要求集合中的Acceptor做出如下回应：</p>
-<ul>
-<li>不再批准任何编号小于N的提案</li>
-<li>反馈已批准的编号小于N中编号最大的提案（如果有的话）</li>
-</ul>
-<p>2.<strong>Accept阶段</strong><br>Proposer在接收到半数以上Acceptor的回复之后，生成编号为N的提案[N, V]，V就是在Prepare阶段中所有响应中编号最大的提案的值，如果这些Acceptor都没有批准过任何值的话，V的值就由Proposer决定</p>
-<p>在确定提案后，Proposer就会将提案再次发送个半数以上的Acceptor集合，此为Accept请求。需要注意的是，此时的多数派集合跟Prepare阶段的多数派集合并不是一定相等的。</p>
-<h3 id="Acceptor批准提案"><a href="#Acceptor批准提案" class="headerlink" title="Acceptor批准提案"></a>Acceptor批准提案</h3><p>下面来看Acceptor的处理逻辑，Acceptor会接收到两种请求：prepare及accept，它的处理分别如下：</p>
-<ul>
-<li>Prepare请求：可以在任何时间响应</li>
-<li>Accept请求：在不违背承诺的前提下课任意响应，</li>
-</ul>
-<p>即Acceptor批准提案的约束条件如下：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P1a: 只有在没有响应过任何编号大于N的prepare请求时，它才能批准这个编号为N的提案</span><br></pre></td></tr></table></figure>
-<h3 id="算法整体流程"><a href="#算法整体流程" class="headerlink" title="算法整体流程"></a>算法整体流程</h3><p>结合前文内容，可以得到如下类似两阶段提交的Paxos算法执行流程：</p>
-<h4 id="阶段一"><a href="#阶段一" class="headerlink" title="阶段一"></a>阶段一</h4><ol>
-<li>Proposer获取一个提案编号N，然后向一个多数派Acceptor集合发送Prepare请求</li>
-<li>如果一个Acceptor接收到一个编号为N的Prepare请求，且N大于它已经响应的所有Prepare请求的编号，它会将自己批准过的编号最大的提案值反馈给Proposer，同时该Acceptor不会再批准任何编号小于N的提案</li>
-</ol>
-<h4 id="阶段二"><a href="#阶段二" class="headerlink" title="阶段二"></a>阶段二</h4><ol>
-<li>如果Proposer收到半数以上Acceptor的Prepare响应，它就会发送提案为[N, V]的Accept请求至一个多数派Acceptor集合，其中V为响应的prepare请求中编号最大的提案值，如果这个值不存在则V会有该Proposer自行生成</li>
-<li>一个Acceptor接收到[N, V]这个提案后，只要它没有响应过编号大于N的Prepare请求，它就可以批准这个提案 </li>
-</ol>
-<p>在实际使运行过程中，一个proposer可能会产生多个提案，但只要遵循上述流程，就一定能得到最终的正确结果，且一个proposer可以在任意时刻丢弃一个提案。</p>
-<h2 id="实际使用"><a href="#实际使用" class="headerlink" title="实际使用"></a>实际使用</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TO DO</span><br></pre></td></tr></table></figure>
-
-      
-
-      
-    </div>
-    <div class="article-info article-info-index">
-      
-      
+        <div class="article-info info-on-right">
+          
 	<div class="article-tag tagcloud">
 		<i class="icon-price-tags icon"></i>
 		<ul class="article-tag-list">
@@ -232,133 +179,33 @@
 		</ul>
 	</div>
 
-      
+          
 
-      
-        <p class="article-more-link">
-          <a class="article-more-a" href="/2018/11/09/paxos-introduction/">展开全文 >></a>
-        </p>
-      
-
-      
-      <div class="clearfix"></div>
-    </div>
+        </div>
+        <div class="clearfix"></div>
+    </header>
   </div>
 </article>
-
-<aside class="wrap-side-operation">
-    <div class="mod-side-operation">
-        
-        <div class="jump-container" id="js-jump-container" style="display:none;">
-            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
-                <i class="icon-font icon-back"></i>
-            </a>
-            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
-                <i class="icon-font icon-plane jump-plane"></i>
-            </div>
-        </div>
-        
-        
-    </div>
-</aside>
-
-
-
-
   
-    <article id="post-crush" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
-  <div class="article-inner">
     
-      <header class="article-header">
-        
+    
+    <article class="archive-article archive-type-post">
+  <div class="archive-article-inner">
+    <header class="archive-article-header">
+      	<div class="article-meta">
+	      	<a href="/2018/11/09/crush/" class="archive-article-date">
+  	<time datetime="2018-11-09T12:51:25.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-09</time>
+</a>
+        </div>
+    	 
   
     <h1 itemprop="name">
-      <a class="article-title" href="/2018/11/09/crush/">CRUSH算法</a>
+      <a class="archive-article-title" href="/2018/11/09/crush/">CRUSH算法</a>
     </h1>
   
 
-        
-        <a href="/2018/11/09/crush/" class="archive-article-date">
-  	<time datetime="2018-11-09T12:51:25.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-09</time>
-</a>
-        
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>在大型分布式存储系统中，如果使用哈希分布的方式来将数据打散的话有两个问题需要考虑：</p>
-<ul>
-<li>如果系统中有设备发生变化，如何在迁移最少数据量的情况下保持系统平衡</li>
-<li>数据的多个副本之间要如何分布才能使数据有较高的可靠性</li>
-</ul>
-<p>显而易见，普通哈希函数是较难解决以上两个问题的，而CRUSH（Controlled Replication Under Scalable Hashing）就是一个在普通哈希之上进行扩展用以解决以上两个问题的数据分布算法。</p>
-<p>CRUSH具有如下特点：</p>
-<ul>
-<li>以数据唯一标识、当前存储集群拓扑结构、数据备份策略作为输入，返回一组存储设备用以保存数据副本</li>
-<li>只需保存很少元数据（cluster map），只有当设备发生变化时，才会修改这些元数据</li>
-<li>用公式描述就是CRUSH(X) –&gt; (OSD1, OSD2, OSD…)，其中输入参数包括X（pgid），cluster map，placement rule</li>
-</ul>
-<h2 id="Cluster-Map"><a href="#Cluster-Map" class="headerlink" title="Cluster Map"></a>Cluster Map</h2><p>cluster map描述了ceph集群中有层级关系的静态拓扑结构，这样使得CRUSH在选择OSD时有机架感知能力，配合预先定义的placement rule（分布规则），就可以使副本分布在不同机架、机房中，提高数据的可用性。cluster map中包含如下概念：</p>
-<ul>
-<li>Device：OSD，一个OSD对应一个存储设备</li>
-<li>Bucket：设备容器，可以递归包含多个设备或者子类型bucket。目前有root、region、datacenter、room、rack、host等，每个device都有自己的权重，bucket的权重就是子bucket和device的权重之和</li>
-</ul>
-<h2 id="Placement-rule"><a href="#Placement-rule" class="headerlink" title="Placement rule"></a>Placement rule</h2><p>通过cluster map来建立集群对应的拓扑结构后，就可以通过placement rule来描述数据分布规则。每条placement rule包含多个操作，这些操作总总共有3种类型：</p>
-<ul>
-<li>take：选择每个bucket，以此为后续步骤的输入</li>
-<li>choose：从输入的bucket中选择指定类型和数量的items</li>
-<li>emit：返回最终结果</li>
-</ul>
-<p>一个典型的placement rule有如下定义格式：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">take a</span><br><span class="line">choose </span><br><span class="line">	choose firstn &#123;num&#125; type &#123;bucket-type&#125;</span><br><span class="line">	chooseleaf firstn &#123;num&#125; type &#123;bucket-type&#125;</span><br><span class="line">		if &#123;num&#125; == 0, choose &#123;pool-num-replicas&#125; buckets </span><br><span class="line">		if &#123;num&#125; &gt; 0 &amp;&amp; &lt; &#123;pool-num-replicas&#125;, choose &#123;num&#125; buckets</span><br><span class="line">		if &#123;num&#125; &lt; 0, choose &#123;pool-num-replicas&#125; - |&#123;num&#125;| buckets</span><br><span class="line">emit</span><br></pre></td></tr></table></figure>
-<p>对应的流程如下：</p>
-<p>1） take a ：选择a这个bucket，一般为root类型的bucket</p>
-<p>2）choose操作有不通的选择方式，其输入都是上一步的输出：</p>
-<ul>
-<li>choose firstn 选出num 个类型为bucket-type类型的bucket</li>
-<li>chooseleaf  先选出num个类型为bucket-type类型的bucket，然后递归到叶节点，选出一个OSD设备：<ul>
-<li>如果num为0，则num被设置为pool的副本数</li>
-<li>如果num大于0且小于pool的副本数，则选择num个</li>
-<li>如果num小于0，则选择pool的副本数减去|num|个</li>
-</ul>
-</li>
-</ul>
-<p>3） emit：输出结果</p>
-<p>其中chooseleaf firstn {num} {bucket_-type}可以等价为以下两个操作：</p>
-<p>​    a）choose firstn {num} {bucket-type}</p>
-<p>​    b） choose first 1 osd</p>
-<p>如下为一个集群中使用的placement rule实例，采用将3副本分布在不同主机上的容灾模式：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">root default &#123;</span><br><span class="line">        id -1           # do not change unnecessarily</span><br><span class="line">        id -2 class hdd         # do not change unnecessarily</span><br><span class="line">        # weight 305.650</span><br><span class="line">        alg straw2</span><br><span class="line">        hash 0  # rjenkins1</span><br><span class="line">        item default-100.98.49.161 weight 43.664</span><br><span class="line">        item default-100.98.46.210 weight 43.664</span><br><span class="line">        item default-100.98.49.174 weight 43.664</span><br><span class="line">        item default-100.98.49.234 weight 43.664</span><br><span class="line">        item default-100.98.49.229 weight 43.664</span><br><span class="line">        item default-100.98.49.251 weight 43.664</span><br><span class="line">        item default-100.98.49.224 weight 43.664</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">rule cos_rep_default_host &#123;</span><br><span class="line">        id 7</span><br><span class="line">        type replicated</span><br><span class="line">        min_size 1</span><br><span class="line">        max_size 10</span><br><span class="line">        step take default</span><br><span class="line">        step chooseleaf firstn 0 type host</span><br><span class="line">        step emit</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h2 id="Bucket-选择算法"><a href="#Bucket-选择算法" class="headerlink" title="Bucket 选择算法"></a>Bucket 选择算法</h2><p>前文描述了CRUSH算法的运行流程，下面来看如何从bucket总选择子item的问题，主要来看有实际使用价值的straw即straw2算法。</p>
-<p>顾名思义，straw算法针对特定输入，为每个元素计算一个签长，从中选择长度最长者作为结果输出。每个签长的计算跟元素自身的权重是有关系的，权重越高，被选中的概率就越高。此时，straw的算法执行结果取决于三个因素：固定输入、元素编号及元素权重，其中元素编号是起随机种子的作用，用以在选择失败后进行重试可以得出不同结果，所以针对特定输入（在ceph里就是pgid），straw的算法只受元素权重的影响。进一步来讲，如果每个元素的签长只和自身权重有关，则可以证明此事straw算法对于集群item变更的处理是最优的，以添加元素为例来说明：</p>
-<p>1）假设当前集群中有n个元素：（e1 e2 e3 ….e<sub>n</sub>)</p>
-<p>2）向集群中添加新元素e<sub>n+1</sub>，(e1 e2 … e<sub>n</sub>, e<sub>n+1</sub>) </p>
-<p>3）假设在n+1加入之前，针对任意输入X，分别计算每个元素的签长为(d1 d2 … d<sub>n</sub>)，并假定其中最大值为d<sub>max</sub>：</p>
-<p>4）因为新元素的签长计算只和其自身编号有关，且它的加入不会影响其他元素的签长计算，假设针对输入X，新元素的签长为d<sub>n+1</sub></p>
-<p>5）因为straw算法是以最长签长元素作为输入的，如果d<sub>n+1</sub> &gt; d<sub>max</sub>，那么X将被重新映射至新元素e<sub>n+1</sub>，否则则对X的已有映射结果无任何影响</p>
-<p>可见，在添加一个元素时，straw会随机得将一些元素映射至新添加的元素中，删除一个元素是，会将该元素中的全部数据随机重新映射，即元素的变更不会导致数据在变更的元素之间迁移（即不会导致额外的数据迁移）。但是原始straw算法在实际使用过程中却被发现会打来额外的数据迁移，社区被迫开始低该算法进行审视，原straw算法伪代码如下：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">max_x = -1</span><br><span class="line">max_item = -1</span><br><span class="line">for each item:</span><br><span class="line">	x = hash(input, r) * item_straw</span><br><span class="line">	if x &gt; max_x :</span><br><span class="line">		max_x = x</span><br><span class="line">		max_item = item</span><br><span class="line">return max_item</span><br></pre></td></tr></table></figure>
-<p>可见，算法的选择结果取决于每个元素输入（input）、随机因子（r）和item_straw（权重），但原有算法中item_straw的计算不但取决于每个元素自身的权重，也和集合中所有其他元素的权重相关，从而导致每个元素变化是会到来额外的数据迁移。新修正后的算法被称之为straw2，其伪代码如下：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">max_x = -1</span><br><span class="line">max_item = -1</span><br><span class="line">for each item:</span><br><span class="line">	x = hash(input, r) #输出落在[0, 65535]之间</span><br><span class="line">	x = ln(x / 65536) / weight</span><br><span class="line">	if x &gt; max_x :</span><br><span class="line">		max_x = x</span><br><span class="line">		max_item = item</span><br><span class="line">return max_item</span><br></pre></td></tr></table></figure>
-<h2 id="CRUSH分析"><a href="#CRUSH分析" class="headerlink" title="CRUSH分析"></a>CRUSH分析</h2><p>理论上来讲，只要选择一个好的哈希函数及合理的权重分配，CRUSH算法是能够保证数据在所有磁盘之间均匀分布的，但是实际使用过程中存在如下问题：</p>
-<ul>
-<li>集群规模较小时，输入样本不够，不一定能保证数据的均衡</li>
-<li>CRUSH算法本身是有缺陷的，前文描述的straw2每次选择item都是计算其独立概率的，但是在实际过程中为了考虑副本的分布策略，却变成了针对item计算条件概率，所以CRUSH也无法真正处理好多副本模式下的副本均匀分布问题</li>
-<li>设备的权重一般是根据其容量计算得来的，但是容量更大的硬盘不代表性能更高。所以针对异构集群（特质存在容量不一的OSD设备），CRUSH无法较好处理这种情况</li>
-</ul>
-<p>因此在实际使用过程中，是允许对CRUSH的计算结果进行人工调整的。在CEPH中，每个设备除了有一个权重之外，还有一个外的reweight，CRUSH在正常选中一个OSD后，还会基于该reweight对OSD进行测试，如果测试失败，则拒绝选择该OSD，reweight调的越高，则测试通过率就越高。</p>
-<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
-<li>Ceph设计原理与实现 [谢型果 等]</li>
-<li>Ceph源码分析 [常涛 等]</li>
-</ul>
-
-      
-
-      
-    </div>
-    <div class="article-info article-info-index">
-      
-      
+        <div class="article-info info-on-right">
+          
 	<div class="article-tag tagcloud">
 		<i class="icon-price-tags icon"></i>
 		<ul class="article-tag-list">
@@ -378,169 +225,19 @@
 		</ul>
 	</div>
 
-      
+          
 
-      
-        <p class="article-more-link">
-          <a class="article-more-a" href="/2018/11/09/crush/">展开全文 >></a>
-        </p>
-      
-
-      
-      <div class="clearfix"></div>
-    </div>
+        </div>
+        <div class="clearfix"></div>
+    </header>
   </div>
 </article>
-
-<aside class="wrap-side-operation">
-    <div class="mod-side-operation">
-        
-        <div class="jump-container" id="js-jump-container" style="display:none;">
-            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
-                <i class="icon-font icon-back"></i>
-            </a>
-            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
-                <i class="icon-font icon-plane jump-plane"></i>
-            </div>
-        </div>
-        
-        
-    </div>
-</aside>
-
-
-
-
   
-    <article id="post-linux-memory-manage" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
-  <div class="article-inner">
+  
+    </div></section>
+  
+
     
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2018/11/09/linux-memory-manage/">Linux 内存管理</a>
-    </h1>
-  
-
-        
-        <a href="/2018/11/09/linux-memory-manage/" class="archive-article-date">
-  	<time datetime="2018-11-09T12:24:04.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-09</time>
-</a>
-        
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <p>下面以X86平台下32为机器为例来分析Linux的内存管理机制。</p>
-<h2 id="用户进程内存管理"><a href="#用户进程内存管理" class="headerlink" title="用户进程内存管理"></a>用户进程内存管理</h2><p>在多任务操作系统上，每个进行都是运载自己的内存空间里，这就是虚拟内存，在32位机器上，这个虚拟内存空间拥有4GB的寻址能力，通过页表（page table）我们可以将虚拟内存映射成真是的物理地址。Linux默认会将高地址的1GB空间分配给内核使用，剩下的3GB作为用户空间供用户使用，整体的进程地址空间布局如下：</p>
-<p><img src="/images/2.png" alt="Linux Memory"></p>
-<p>对应的主要区域如下：</p>
-<ul>
-<li>内核空间：供操作系统内核使用，用户态程序不能访问</li>
-</ul>
-<ul>
-<li>栈：维护函数调用的上下文，向下增长，通常有数M大小。通过系统调用expand_stack()可以将分配栈空间，如果栈空间无法增长了（通常已经到8MB）了，则会发生栈溢出</li>
-<li>堆：应用程序动态分区内存区域，通过brk系统调用来向上增长</li>
-<li>内存映射区：通过mmap分配，用以映射共享库或映射一个匿名空间供程序使用。mmap是一个高效、方便地操作一个文件，通过mmap将动态库映射至内存中可以实现快速加载，或者通过mmap映射出一个不跟任何文件关联的匿名空间来供用户程进程使用。在Linux中，如果你通过malloc申请一块打内存的话（通常是大于128KB），glibc通常会调用mmap系统调用来分配内存</li>
-<li>BSS、DATA、TEXT：存储用户程序数据段、代码段等。其中BSS、DATA存储的都是存储程序全局或静态变量，不同的是BSS存储的是为初始化的变量</li>
-</ul>
-<p>如上图所示，每个段之间可能会有部分随机偏移值，即每段的开始位置并不是固定的，这样有利于降低被攻击的风险。通过/proc/{pid}/maps这个文件，可以观察进行的内存使用情况。</p>
-<h2 id="内核空间内存管理"><a href="#内核空间内存管理" class="headerlink" title="内核空间内存管理"></a>内核空间内存管理</h2><p>如下图所示，Linux中的进程实例是通过<code>task_struct</code>这样一个结构来描述的，该结构中的<code>mm</code>这个域指向一个内存描述符<code>mm_struct</code>，记录了进程执行期间它的内存摘要。如图所示，它存储了进程中每个段的起始位置、物理页的数目、虚拟空间的使用情况等。</p>
-<p><img src="/images/7.png" alt=""></p>
-<p>在内存描述符中(<code>mm_struct</code>)，我们还可以找到两个重要的结构：虚拟内存区域集合（the set of virtual memory areas ）及页表（page tables）。如下，为一个内存区域集合：</p>
-<p><img src="/images/8.png" alt=""></p>
-<p>每个VMA（virtual memory area）是一段连续的、不会重叠虚拟地址，一个<code>vm_area_struct</code>实例完整得描述了一个内存区域，包括起始、结束地址，flags描述的访问权限及行为，以及vm_file描述的对应的映射文件（如果有的话，没有的话这段内存区域就是匿名的）。</p>
-<p>一个进程的VMA会以两种形式存储在存储在其内存描述符中：以链表的形式存储在mmap域中，以红黑树的心事存储在mm_rb域中。红黑树的形式使得内核可以快速查找出给定虚拟地址对应的内存区域，当我们读取/proc/{pid}/maps文件时，内核可以快速恢复出其VMA链表。</p>
-<p>Linux在通常情况下会使用4KB大小的页来映射用户空间的虚拟空间，处理器会通过页表（<code>page tables</code>）来将虚拟地址转换为物理地址，Linux在内存描述符的<code>pgd</code>域中存储了指向进程<code>page tables</code>的指针，每个虚拟内存页在<code>page tables</code>里都会有一个页表项(<code>page table entry(PET)</code>)与之对应，通常来说，PTE在x86架构下是一个大小为4byte的记录，如下所示：</p>
-<p><img src="/images/9.png" alt=""></p>
-<p>如上各个位的作用如下：</p>
-<ul>
-<li>P：标识该虚拟页是否在内存中，0表示不在内存中，访问该页会出发缺页异常</li>
-<li>R/W：标识是否可读/写，如果为0，则页面为只读</li>
-<li>U/S：标识是用户/管理员，如果为0，只能供内核使用</li>
-<li>D：标识是否为脏页面，脏页面表示执行过写操作</li>
-<li>A：标识是否被访问过</li>
-</ul>
-<p>虚拟内存并不存储任何东西，仅仅是将一个进程的地址空间映射至真实的物理地址空间上。这个物理地址空间被内核切分成一个个页帧（page frames），它是物理内存管理的最小单位，32为X86架构下，Linux通常采用4KB大小的页帧，每个页帧在内核中都有一个描述符和标志位进行追踪。下面我们把VMA，PTE、page frame连起来看它们是如何工作的，如下所示为一个用户堆内存：</p>
-<p><img src="/images/10.png" alt=""></p>
-<p>蓝色矩形表示VMA范围内的页，箭头表示通过PTE将虚拟页映射至page frame，没有箭头指出的虚拟页，意味着这个页的P flag为0，即这个虚拟页从来没有被访问或者刚被置换出来。VMA就是进程与内核之间的签约，进程对内核发起请求（内存分配，文件映射等），内核同意后创建或者更新对应的VMA，但它不是立即就将虚拟页映射至物理页，而是在发生缺页异常的时候才会真正映射，所以实际情况是VMA记录进程同内核达成的协议，PTE记录内核实际已经执行了哪些操作。以下为内存分配的一个例子：</p>
-<p><img src="/images/11.png" alt=""></p>
-<p>当进程通过brk()申请申请内存时，内核只是更新对应VMA后便返回，并没有实际的物理页被分配，当进程访问这个页时，内核会去寻找对应的VMA，如果找到了会做前置检查（读写权限等），如果没找到，说明进程访问了不合理的位置（即之前未与内核达成合同），这就会出发段错误。找到VMA之后，内核会通过查找PTE内从及VMA的类型来解决这个缺页异常（page fault），此时PTE内容为空，之后内核便会分配一个页帧并将PTE指向分配的页帧。</p>
-<h2 id="Page-Cache"><a href="#Page-Cache" class="headerlink" title="Page Cache"></a>Page Cache</h2><p>操作系统在操作文件时有两个问题需要解决：</p>
-<ul>
-<li>相对于内存来说，硬盘的读取速度非常慢</li>
-<li>需要做到将文件加载至内存中 一次便可供多个进程共享</li>
-</ul>
-<p>以上两个问题都可以通过page cache来解决，kernel用它来存储与页面大小相同的文件块。下面用一个render程序为例来描述一个文件的读取过程，render会打开scene.dat文件，每次读取512 byte的内容并将其存入堆内存中，读取流程如下：</p>
-<p><img src="/images/3.png" alt=""></p>
-<p>读取挖12KB后，render的堆内存及相关页帧如下：</p>
-<p><img src="/images/4.png" alt=""></p>
-<p>事实上，尽管只调用了read函数，此时也会有三个page cache的页帧中存储了部分scene.dat的部分数据，因为所有的常规文件操作都是通过page cache来进行的，在x86平台上，所有文件在内核看来都是一系列4KB大小的块。即使你只是读取1byte数据，它所在的4KB大小的块都会被复制到page cache中。</p>
-<p>不幸的是，为了是用户态程序读取文件内容，内核还需要将page cache中的东西复制到用户内存中，这不但会消耗cpu，同时也会浪费物理内存。如上图所示，scene.dat的内容在内存中存储了两份，而且每个实例都会保存一份。至此，这种读取方式虽然解决磁盘延迟的问题，但会带来较多额外的问题，但使用memory-mapped files却可以解决这些问题，即通过内核将进程的虚拟页面直接映射至page cache中，这样能有效提高文件读写效率，同时也能节省部分物理内存，如下所示：</p>
-<p><img src="/images/5.png" alt=""></p>
-<p>在使用了page cache的读写时，当进程调用write()时，数据只是被写入到page cache中，对应的页进入dirty状态，磁盘IO不会立刻发生，如果此时主机死机，数据就会丢失，因此重要的数据在写入时必须调用fsync（仍需要注意磁盘驱动缓存）。另一方面，读取操作会阻塞住，直至数据准备好，内核会通过eager loading（积极加载）来加速读取，即预读取部分数据至page cache中。最后，你可以通过<code>O_DIRECT</code>来绕过page cache。</p>
-<p>一个文件映射可以是私有的，也可能是共享的，这种区别只有在更改内存中的内容时才能体现出来：私有映射时进程对内存的修改不会提交至磁盘中或者被其他进程所见，而共享映射却可以。内核通过页表项，使用<code>copy on write</code>来实现私有映射。如下示例中，render和render3d同时创建了scene.dat的私有映射，render修改了映射至内存中的文件：</p>
-<p><img src="/images/6.png" alt=""></p>
-<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
-<li><a href="https://manybutfinite.com/post/anatomy-of-a-program-in-memory/" target="_blank" rel="noopener">Anatomy of a Program in Memory</a></li>
-<li><a href="https://manybutfinite.com/post/how-the-kernel-manages-your-memory" target="_blank" rel="noopener">How The Kernel Manages Your Memory</a></li>
-<li><a href="https://manybutfinite.com/post/page-cache-the-affair-between-memory-and-files/" target="_blank" rel="noopener">Page Cache, the Affair Between Memory and Files</a></li>
-</ul>
-
-      
-
-      
-    </div>
-    <div class="article-info article-info-index">
-      
-      
-	<div class="article-tag tagcloud">
-		<i class="icon-price-tags icon"></i>
-		<ul class="article-tag-list">
-			 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">Linux</a>
-        		</li>
-      		
-		</ul>
-	</div>
-
-      
-
-      
-        <p class="article-more-link">
-          <a class="article-more-a" href="/2018/11/09/linux-memory-manage/">展开全文 >></a>
-        </p>
-      
-
-      
-      <div class="clearfix"></div>
-    </div>
-  </div>
-</article>
-
-<aside class="wrap-side-operation">
-    <div class="mod-side-operation">
-        
-        <div class="jump-container" id="js-jump-container" style="display:none;">
-            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
-                <i class="icon-font icon-back"></i>
-            </a>
-            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
-                <i class="icon-font icon-plane jump-plane"></i>
-            </div>
-        </div>
-        
-        
-    </div>
-</aside>
-
-
-
-
-  
-  
 
 
           </div>
@@ -562,10 +259,10 @@
     <script>
 	var yiliaConfig = {
 		mathjax: false,
-		isHome: true,
+		isHome: false,
 		isPost: false,
 		isArchive: false,
-		isTag: false,
+		isTag: true,
 		isCategory: false,
 		open_in_new: false,
 		toc_hide_index: true,
