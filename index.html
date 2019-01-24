@@ -140,6 +140,114 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-leveldb-file-format" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2019/01/24/leveldb-file-format/">LevelDB之文件格式</a>
+    </h1>
+  
+
+        
+        <a href="/2019/01/24/leveldb-file-format/" class="archive-article-date">
+  	<time datetime="2019-01-24T13:08:30.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2019-01-24</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>LevelDB中主要有以下几种文件：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">enum</span> FileType &#123;</span><br><span class="line">  kLogFile,</span><br><span class="line">  kDBLockFile,</span><br><span class="line">  kTableFile,</span><br><span class="line">  kDescriptorFile,</span><br><span class="line">  kCurrentFile,</span><br><span class="line">  kTempFile,</span><br><span class="line">  kInfoLogFile  <span class="comment">// Either the current one, or an old one</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></p>
+<p>对应的文件作用如下：</p>
+<ul>
+<li>kLogFile：WAL日志文件，文件名为[0-9]+.log</li>
+<li>kDBLockFile：db锁文件，文明名为LOCK，通过LOCK文件加文件锁（flock）来实现只有一个实例能操作db</li>
+<li>kTableFile：sstable文件，文件名为[0-9]+.sst</li>
+<li>kDescriptorFile：db元数据文件，存储系统中version信息，文件名为MANIFEST-[0-9]+，每当db发生compaction时，对应的versionedit会记录到descriptor文件中</li>
+<li>kCurrentFile：记录当前使用的descriptor文件名，文件名为CURRENT</li>
+<li>kTempFile：临时文件，db在修复过程中会产生临时文件，文件名为[0-9]+.dbtmp</li>
+<li>kInfoLogFile：db运行过程中的日志文件，文件名为LOG</li>
+</ul>
+<p>下面主要来分析kLogFile文件、kTableFile。</p>
+<h2 id="kLogFile"><a href="#kLogFile" class="headerlink" title="kLogFile"></a>kLogFile</h2><p>kLogFile是以block为单位组织的，除了文件结尾的block外，每个block的大小为32KB。每个block由若干填入record组成，如下所示：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Each block consists of a sequence of records:</span><br><span class="line"></span><br><span class="line">    block := record* trailer?</span><br><span class="line">    record :=</span><br><span class="line">      checksum: uint32     <span class="comment">// type及data部分数据的校验值，大小为4B，用小端序存储</span></span><br><span class="line">      length: uint16       <span class="comment">// data部分的长度，大小为2B</span></span><br><span class="line">      type: uint8          <span class="comment">// FULL, FIRST, MIDDLE, LAST中的一个，大小为1B</span></span><br><span class="line">      data: uint8[length]  <span class="comment">//存储实际数据</span></span><br></pre></td></tr></table></figure></p>
+<p>block的示意图如下：</p>
+<p><img src="/images/level/pic3.png" alt=""></p>
+<p>每个record的示意图如下：</p>
+<p><img src="/images/level/pic4.png" alt=""></p>
+<p>一个record不会从block的最后6B的位置开始写入（因为一个record至少为7B），所以一个block可能会以trailer结尾，此部分位置会全部填0，读取该block时该部分数据会被跳过。由于每个block的大小固定，一条wal日志可能需要被切分到多个block中的record中存储，type这个字段记录的便是这个record的类型，目前只有上文所列的四种类型。FULL表示当前record存储的是一条完整的日志，FIRST、MIDDLE、LAST分别代表一条日志的头部、中部、尾部三个部分，通过多个record的拼接可还原出一条完整的日志。</p>
+<h3 id="log写入"><a href="#log写入" class="headerlink" title="log写入"></a>log写入</h3><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line">AddRecord(<span class="keyword">const</span> Slice&amp; slice) &#123;</span><br><span class="line">  </span><br><span class="line">  Status s;</span><br><span class="line">  <span class="keyword">bool</span> begin = <span class="literal">true</span>;</span><br><span class="line">  <span class="keyword">do</span> &#123;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">int</span> leftover = kBlockSize - block_offset_;</span><br><span class="line">    assert(leftover &gt;= <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (leftover &lt; kHeaderSize) &#123;</span><br><span class="line">      <span class="comment">// 如果当前block剩余空间小于7B，则在block尾部填0后切换至新的block</span></span><br><span class="line">      <span class="keyword">if</span> (leftover &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="comment">// 尾部填0</span></span><br><span class="line">        assert(kHeaderSize == <span class="number">7</span>);</span><br><span class="line">        dest_-&gt;Append(Slice(<span class="string">"\x00\x00\x00\x00\x00\x00"</span>, leftover));</span><br><span class="line">      &#125;</span><br><span class="line">      block_offset_ = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> avail = kBlockSize - block_offset_ - kHeaderSize;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> fragment_length = (left &lt; avail) ? left : avail;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//填入该record的type</span></span><br><span class="line">    RecordType type;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">bool</span> end = (left == fragment_length);</span><br><span class="line">    <span class="keyword">if</span> (begin &amp;&amp; end) &#123;</span><br><span class="line">      type = kFullType;</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (begin) &#123;</span><br><span class="line">      type = kFirstType;</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (end) &#123;</span><br><span class="line">      type = kLastType;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      type = kMiddleType;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//写入record</span></span><br><span class="line">    s = EmitPhysicalRecord(type, ptr, fragment_length);</span><br><span class="line">    ptr += fragment_length;</span><br><span class="line">    left -= fragment_length;</span><br><span class="line">    begin = <span class="literal">false</span>;</span><br><span class="line">  &#125; <span class="keyword">while</span> (s.ok() &amp;&amp; left &gt; <span class="number">0</span>);</span><br><span class="line">  <span class="keyword">return</span> s;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="log读取"><a href="#log读取" class="headerlink" title="log读取"></a>log读取</h3><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line">ReadRecord(Slice* record, <span class="built_in">std</span>::<span class="built_in">string</span>* scratch) &#123;</span><br><span class="line">  Slice fragment;</span><br><span class="line">  <span class="keyword">while</span> (<span class="literal">true</span>) &#123;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">int</span> record_type = ReadPhysicalRecord(&amp;fragment);</span><br><span class="line">    <span class="comment">//计算该block中下个实际record的偏移值</span></span><br><span class="line">    <span class="keyword">uint64_t</span> physical_record_offset =</span><br><span class="line">        end_of_buffer_offset_ - buffer_.size() - kHeaderSize - fragment.size();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">switch</span> (record_type) &#123;</span><br><span class="line">      <span class="keyword">case</span> kFullType:</span><br><span class="line">        <span class="comment">//如果读取的record是完整的一条记录，则直接返回读取到的数据</span></span><br><span class="line">        scratch-&gt;clear();</span><br><span class="line">        *record = fragment;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line"></span><br><span class="line">      <span class="keyword">case</span> kFirstType:</span><br><span class="line">       </span><br><span class="line">        <span class="comment">//读取到的是第一个record，存储在scratch中，继续读取</span></span><br><span class="line">        scratch-&gt;assign(fragment.data(), fragment.size());</span><br><span class="line">        in_fragmented_record = <span class="literal">true</span>;</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">      <span class="keyword">case</span> kMiddleType:</span><br><span class="line">        <span class="comment">//读取到中间record，拼接数据，继续读取</span></span><br><span class="line">        scratch-&gt;append(fragment.data(), fragment.size());</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">      <span class="keyword">case</span> kLastType:</span><br><span class="line">       <span class="comment">//读取到最后一个record，拼接数据，继续读取</span></span><br><span class="line">        <span class="keyword">if</span> (!in_fragmented_record) &#123;</span><br><span class="line">          ReportCorruption(fragment.size(),</span><br><span class="line">                           <span class="string">"missing start of fragmented record(2)"</span>);</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">          scratch-&gt;append(fragment.data(), fragment.size());</span><br><span class="line">          *record = Slice(*scratch);</span><br><span class="line">          last_record_offset_ = prospective_record_offset;</span><br><span class="line">          <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="kTableFile"><a href="#kTableFile" class="headerlink" title="kTableFile"></a>kTableFile</h2><p>kTableFile是db中持久化存储数据的文件，它也是以block的形式来组成文件，整体上看，它主要有数据block、元数据block组成，由于kTableFile文件尺寸可能较大，读取时如果从头扫描这个文件会造成读取效率低下，所以kTableFile文件中也存储data block及meta block的索引信息来加速读取，整体格式如下：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">&lt;beginning_of_file&gt;</span><br><span class="line">[data block <span class="number">1</span>]</span><br><span class="line">[data block <span class="number">2</span>]</span><br><span class="line">...</span><br><span class="line">[data block N]</span><br><span class="line">[meta block <span class="number">1</span>]</span><br><span class="line">...</span><br><span class="line">[meta block K]</span><br><span class="line">[metaindex block]</span><br><span class="line">[index block]</span><br><span class="line">[Footer]        (fixed size; starts at file_size - <span class="keyword">sizeof</span>(Footer))</span><br><span class="line">&lt;end_of_file&gt;</span><br></pre></td></tr></table></figure></p>
+<p>整体示意图如下：</p>
+<p><img src="/images/level/pic5.png" alt=""></p>
+<p>其中，data_block存储的实际kv数据，index block中保存的是每个data block的last key及其在文件中的索引（偏移量，大小），当前版本中，meta block及metaindex block均未实现。Footer是文件尾部固定长度的块，存储的是metaindex block及index block的索引信息。<br>每个data block在生成时，会在其尾部存储1B的type和4B的crc，分别记录该block的压缩类型及数据校验值。Block中的每个record（rentry）存储了一条kv数据，由于key是连续的，系统会key采用前缀压缩的方式来减少所需存储空间，只需存储当前key的不同部分，前缀可以从之前的key中获取出来。Block的结构如下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Block := entry* </span><br><span class="line">		 trailer </span><br><span class="line">		 type <span class="comment">//压缩类型，1B</span></span><br><span class="line">		 crc <span class="comment">// 数据校验值，4B</span></span><br><span class="line">entry := </span><br><span class="line">		shared_bytes <span class="comment">// key中共享前缀的长度</span></span><br><span class="line">		unshared_bytes <span class="comment">// key中非共享前缀的长度</span></span><br><span class="line">		value_length <span class="comment">// value的长度</span></span><br><span class="line">		key_dalta <span class="comment">// key非共享部分内容</span></span><br><span class="line">		value <span class="comment">// value数据</span></span><br></pre></td></tr></table></figure>
+<p>例如第一个key为<code>sam</code>，第二个key为<code>samon</code>，则第二条记录只需存储<code>on</code>这部分数据，前缀可以根据前一个key获取出来，此时该entry对应的各部分如下：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">shared_bytes: <span class="number">3</span></span><br><span class="line">unshared_bytes: <span class="number">2</span></span><br><span class="line">key_dalta: on</span><br></pre></td></tr></table></figure></p>
+<p>通过这种前缀压缩的方式可以降低所需存储空间。此外，如果一个block完全按照前文所述逻辑进行压缩，每次查找key的时候都要从头开始遍历，这样的查找效率可能较低。所以系统进一步细化了粒度，采用分段压缩，每个段内的key都以第一个key开始做前缀压缩，这第一个key就被称作重启点，block中所有重启点的偏移值和数量都会记录在trailer中。</p>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li>淘宝leveldb的实现</li>
+<li><a href="http://catkang.github.io/2017/01/17/leveldb-data.html" target="_blank" rel="noopener">庖丁解LevelDB之数据存储</a></li>
+</ul>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">存储</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">leveldb</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2019/01/24/leveldb-file-format/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-linux-performance-analysis-60s" class="article article-type-post  article-index" itemscope="" itemprop="blogPost">
   <div class="article-inner">
     
@@ -943,7 +1051,7 @@
   <div class="outer">
     <div id="footer-info">
     	<div class="footer-left">
-    		&copy; 2018 Leeshine
+    		&copy; 2019 Leeshine
     	</div>
       	<div class="footer-right">
       		<a href="http://hexo.io/" target="_blank">Hexo</a>  Theme <a href="https://github.com/litten/hexo-theme-yilia" target="_blank">Yilia</a> by Litten
