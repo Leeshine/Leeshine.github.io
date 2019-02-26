@@ -68,7 +68,7 @@
 
 
 
-  <meta name="keywords" content="Hexo, NexT">
+  <meta name="keywords" content="linux,storage,">
 
 
 
@@ -80,7 +80,7 @@
 
 
 <meta name="description" content="本文主要讲述在Linux服务上数据从应用层写入磁盘的关键路径，聚焦于其中涉及到的各种缓存，讲述在c编程中如何确保数据能被持久化存储，避免系统异常时造成数据丢失。  IO bufferingLinux下，用户数据在最终达到持久化存储层之前会经过多层，如下所示：  最顶层是需要存入数据的应用，数据首先是以block的方式存储在应用本身的memory或者buffer中，这些buffer也可能会被转交给">
-<meta name="keywords" content="test">
+<meta name="keywords" content="linux,storage">
 <meta property="og:type" content="article">
 <meta property="og:title" content="确保数据到达磁盘">
 <meta property="og:url" content="http://yoursite.com/2019/02/26/data-reaches-disk/index.html">
@@ -89,7 +89,7 @@
 <meta property="og:locale" content="default">
 <meta property="og:image" content="http://yoursite.com/images/linux/io-ac.png">
 <meta property="og:image" content="http://yoursite.com/images/linux/fsync.png">
-<meta property="og:updated_time" content="2019-02-26T13:14:46.008Z">
+<meta property="og:updated_time" content="2019-02-26T13:16:01.216Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="确保数据到达磁盘">
 <meta name="twitter:description" content="本文主要讲述在Linux服务上数据从应用层写入磁盘的关键路径，聚焦于其中涉及到的各种缓存，讲述在c编程中如何确保数据能被持久化存储，避免系统异常时造成数据丢失。  IO bufferingLinux下，用户数据在最终达到持久化存储层之前会经过多层，如下所示：  最顶层是需要存入数据的应用，数据首先是以block的方式存储在应用本身的memory或者buffer中，这些buffer也可能会被转交给">
@@ -450,6 +450,14 @@
 
     <footer class="post-footer">
       
+        <div class="post-tags">
+          
+            <a href="/tags/linux/" rel="tag"># linux</a>
+          
+            <a href="/tags/storage/" rel="tag"># storage</a>
+          
+        </div>
+      
 
       
       
@@ -557,7 +565,7 @@
               
               <div class="site-state-item site-state-tags">
                 
-                  <span class="site-state-item-count">7</span>
+                  <span class="site-state-item-count">8</span>
                   <span class="site-state-item-name">tags</span>
                 
               </div>
