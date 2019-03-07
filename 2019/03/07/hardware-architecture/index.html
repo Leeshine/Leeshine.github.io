@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="Linux,">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="CPU架构早期时，个人电脑及小型服务器的架构如下：所有CPU之间是通过FSB（Front Side Bus， FSB）进行相互连接，并通过它来连接北桥，北桥连接高速设备（如主存等），通过北桥可以连接南桥，南迁连接低速设备（如硬盘、外设等）。  这样的架构有这样一些特点：  CPU之间的交互需要共用连接比较的总线（FSB） 每个RAM只有一个接口 CPU同主存之间的交互要通过北桥 CPU同南桥上的设">
+<meta name="keywords" content="Linux">
+<meta property="og:type" content="article">
+<meta property="og:title" content="内存知识之现代商用硬件架构">
+<meta property="og:url" content="http://yoursite.com/2019/03/07/hardware-architecture/index.html">
+<meta property="og:site_name" content="Leesine&#39;s Blog">
+<meta property="og:description" content="CPU架构早期时，个人电脑及小型服务器的架构如下：所有CPU之间是通过FSB（Front Side Bus， FSB）进行相互连接，并通过它来连接北桥，北桥连接高速设备（如主存等），通过北桥可以连接南桥，南迁连接低速设备（如硬盘、外设等）。  这样的架构有这样一些特点：  CPU之间的交互需要共用连接比较的总线（FSB） 每个RAM只有一个接口 CPU同主存之间的交互要通过北桥 CPU同南桥上的设">
+<meta property="og:locale" content="default">
+<meta property="og:image" content="http://yoursite.com/images/linux-memory/pic1.png">
+<meta property="og:image" content="http://yoursite.com/images/linux-memory/pic2.png">
+<meta property="og:image" content="http://yoursite.com/images/linux-memory/pic3.png">
+<meta property="og:image" content="http://yoursite.com/images/linux-memory/pic6.png">
+<meta property="og:updated_time" content="2019-03-07T12:34:42.489Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="内存知识之现代商用硬件架构">
+<meta name="twitter:description" content="CPU架构早期时，个人电脑及小型服务器的架构如下：所有CPU之间是通过FSB（Front Side Bus， FSB）进行相互连接，并通过它来连接北桥，北桥连接高速设备（如主存等），通过北桥可以连接南桥，南迁连接低速设备（如硬盘、外设等）。  这样的架构有这样一些特点：  CPU之间的交互需要共用连接比较的总线（FSB） 每个RAM只有一个接口 CPU同主存之间的交互要通过北桥 CPU同南桥上的设">
+<meta name="twitter:image" content="http://yoursite.com/images/linux-memory/pic1.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/03/07/hardware-architecture/">
+
+
+
+
+
+  <title>内存知识之现代商用硬件架构 | Leesine's Blog</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope="" itemtype="http://schema.org/WebPage" lang="default">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Leesine's Blog</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Stay Hungry, Stay Foolish</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/07/hardware-architecture/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">内存知识之现代商用硬件架构</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-03-07T20:29:13+08:00">
+                2019-03-07
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h2 id="CPU架构"><a href="#CPU架构" class="headerlink" title="CPU架构"></a>CPU架构</h2><p>早期时，个人电脑及小型服务器的架构如下：所有CPU之间是通过FSB（Front Side Bus， FSB）进行相互连接，并通过它来连接北桥，北桥连接高速设备（如主存等），通过北桥可以连接南桥，南迁连接低速设备（如硬盘、外设等）。</p>
+<p><img src="/images/linux-memory/pic1.png" alt=""></p>
+<p>这样的架构有这样一些特点：</p>
+<ul>
+<li>CPU之间的交互需要共用连接比较的总线（FSB）</li>
+<li>每个RAM只有一个接口</li>
+<li>CPU同主存之间的交互要通过北桥</li>
+<li>CPU同南桥上的设备间的交互必须通过北桥</li>
+</ul>
+<p>这样的一个架构容易引入这样一些瓶颈：</p>
+<ul>
+<li>第一个瓶颈是对RAM的访问。早期时，所有设备的交互都要通过CPU来进行，这样会严重影响整个系统的性能。为了解决这个问题，直接内存访问（DMA，direct memory access ）技术被发明出来了，DMA允许外设通过北桥直接同RAM进行交互。这样能极大降低CPU负载，提升系统整体性能。</li>
+<li>第二个瓶颈是通过从北桥连接RAM的总线。早期时系统是通过一条总线来连接所有RAM，所以无法并行访问内存，最近的RAM都支持多条总线连接来提升内存访问带宽</li>
+</ul>
+<p>但内存访问带宽受限时，合理安排内存访问顺序对于提升系统性能是非常重要的。众所周知，即使使用了CPU缓存后，CPU的运行速度（内部寄存器的访问速度）也比主存的访问速度快多了。如果多个线程、CPU核心、CPU处理器同时访问某块内存，那么整体的内存访问延迟是很高的。在一些现代系统中，在北桥上不是直接连接RAM，而是会连接一些外部内存分配器，如下所示：</p>
+<p><img src="/images/linux-memory/pic2.png" alt=""></p>
+<p>这个架构的好处是有多个内存总线存在，能提升整体的内存访问带宽，同时能提升系统的内存总量，并且通过访问不同内存条的方式可以降低并发内存访问的延迟。此时，系统的整体内存访问带宽主要受限于北桥的传输速度，这即使传统SMP（对称多核处理器）架构。</p>
+<p>在北桥之间接入多个外部内存分配器并不是提升内存访问带宽的唯一方法，在一些系统中，内存分配器被放入CPU中，内存条也是直连每个CPU的，如下所示：</p>
+<p><img src="/images/linux-memory/pic3.png" alt=""></p>
+<p>这就是NUMA（非均匀性内存访问）架构，采用这种架构也有这样的问题：</p>
+<ul>
+<li>内存访问不再是对称的，本地内存还能以正常的速度访问，然而访问其他处理的内存需要通过对应的CPU来进行交互，这样会导致访问远程内存的速度较慢</li>
+</ul>
+<h2 id="存储器"><a href="#存储器" class="headerlink" title="存储器"></a>存储器</h2><h3 id="随机访问存储器（RAM）"><a href="#随机访问存储器（RAM）" class="headerlink" title="随机访问存储器（RAM）"></a>随机访问存储器（RAM）</h3><p>RAM分为两类：静态随机访问存储器（SRAM）和动态随机访问存储器（DRAM）。SRAM比DRAM访问速度快得多，但也更加昂贵，SRAM通常都是用来做高速缓存，DRAM通常用来做主存。SRAM与DRAM都是易失性存储，只要断电，其中存储的数据便会丢失。</p>
+<h3 id="磁盘"><a href="#磁盘" class="headerlink" title="磁盘"></a>磁盘</h3><p>磁盘是应用最广的数据存储设备，容量比RAM大得多，但是访问延迟也高。从磁盘读取信息时间为ms级别，DRAM的访问速度比磁盘快10万倍，而SRAM比磁盘快100万倍。</p>
+<p>磁盘是由盘片构成的，每个盘片有两面被称之为表面，盘片中央有一个可旋转的主轴，盘片以固定速率围绕主轴旋转，如下图所示展示了一个典型的磁盘结构：</p>
+<p><img src="/images/linux-memory/pic6.png" alt=""></p>
+<p>每个表面由一组称为磁道的同心圆组成，每个磁道被划分为一组扇区，扇区间由间隙隔开，扇区是磁盘存储的最小单位，柱面是所有表面上到主轴距离相等的磁道的集合。</p>
+<p>磁盘以扇区为基本单位，使用磁头来读写盘面上的数据，对扇区的访问时间主要由一下三个部分组成：</p>
+<ul>
+<li>寻道时间：磁头移动到目标扇区所在磁道的位置</li>
+<li>旋转时间：盘面旋转将目标扇区转到到磁头下</li>
+<li>传送时间：磁头读取扇区中的数据</li>
+</ul>
+<p>相对来说，传送时间远小于寻道时间和旋转时间，这也是为什么硬盘的顺序读写要比随机读写速度快得多。因为寻道时间和旋转时间大致是相等的，所以将寻道时间乘于2是估计磁盘访问时间的简单办法。</p>
+<h3 id="固态硬盘（ssd）"><a href="#固态硬盘（ssd）" class="headerlink" title="固态硬盘（ssd）"></a>固态硬盘（ssd）</h3><p>固态硬盘是一种基于闪存的技术，相对磁盘来说，ssd上随机访问的速度较顺序访问的速度不会相差太多。</p>
+<h2 id="各级存储设备访问延迟"><a href="#各级存储设备访问延迟" class="headerlink" title="各级存储设备访问延迟"></a>各级存储设备访问延迟</h2><p>以一个CPU时钟周期为单位，各级设备的访问延迟如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">设备</th>
+<th style="text-align:center">延迟（时钟周期）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">L1</td>
+<td style="text-align:center">2~3</td>
+</tr>
+<tr>
+<td style="text-align:center">L2</td>
+<td style="text-align:center">15</td>
+</tr>
+<tr>
+<td style="text-align:center">L3</td>
+<td style="text-align:center">30~40</td>
+</tr>
+<tr>
+<td style="text-align:center">Memory</td>
+<td style="text-align:center">100~200</td>
+</tr>
+<tr>
+<td style="text-align:center">Disk</td>
+<td style="text-align:center">1亿~2亿（30ms）左右</td>
+</tr>
+</tbody>
+</table>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/02/26/data-reaches-disk/" rel="next" title="确保数据到达磁盘">
+                <i class="fa fa-chevron-left"></i> 确保数据到达磁盘
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Leeshine</p>
+              <p class="site-description motion-element" itemprop="description">Stay Hungry, Stay Foolish</p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">10</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">8</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/leeshine" target="_blank" title="Github">
+                      
+                        <i class="fa fa-fw fa-github"></i>Github</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:lvshanchun@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU架构"><span class="nav-number">1.</span> <span class="nav-text">CPU架构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#存储器"><span class="nav-number">2.</span> <span class="nav-text">存储器</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#随机访问存储器（RAM）"><span class="nav-number">2.1.</span> <span class="nav-text">随机访问存储器（RAM）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#磁盘"><span class="nav-number">2.2.</span> <span class="nav-text">磁盘</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#固态硬盘（ssd）"><span class="nav-number">2.3.</span> <span class="nav-text">固态硬盘（ssd）</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#各级存储设备访问延迟"><span class="nav-number">3.</span> <span class="nav-text">各级存储设备访问延迟</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Leeshine</span>
+
+  
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Muse</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
