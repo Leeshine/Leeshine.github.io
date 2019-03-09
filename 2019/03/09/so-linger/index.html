@@ -68,7 +68,7 @@
 
 
 
-  <meta name="keywords" content="Hexo, NexT">
+  <meta name="keywords" content="网络,">
 
 
 
@@ -79,17 +79,18 @@
 
 
 
-<meta name="description" content="Stay Hungry, Stay Foolish">
-<meta name="keywords" content="test">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Leesine&#39;s Blog">
-<meta property="og:url" content="http://yoursite.com/archives/2019/02/index.html">
+<meta name="description" content="本文主要参照MSDN文档，以windows为例，讲述socket编程中SO_LINGER选项的使用  SO_LINGER选项用以用以设定一个socket在关闭时队列中的待发送数据如何处理以及closesocket函数，该结构定义如下： 1234typedef struct linger &amp;#123;  u_short l_onoff;  u_short l_linger;&amp;#125; LINGE">
+<meta name="keywords" content="网络">
+<meta property="og:type" content="article">
+<meta property="og:title" content="SO_LINGER选项使用方式">
+<meta property="og:url" content="http://yoursite.com/2019/03/09/so-linger/index.html">
 <meta property="og:site_name" content="Leesine&#39;s Blog">
-<meta property="og:description" content="Stay Hungry, Stay Foolish">
+<meta property="og:description" content="本文主要参照MSDN文档，以windows为例，讲述socket编程中SO_LINGER选项的使用  SO_LINGER选项用以用以设定一个socket在关闭时队列中的待发送数据如何处理以及closesocket函数，该结构定义如下： 1234typedef struct linger &amp;#123;  u_short l_onoff;  u_short l_linger;&amp;#125; LINGE">
 <meta property="og:locale" content="default">
+<meta property="og:updated_time" content="2019-03-09T15:19:43.671Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Leesine&#39;s Blog">
-<meta name="twitter:description" content="Stay Hungry, Stay Foolish">
+<meta name="twitter:title" content="SO_LINGER选项使用方式">
+<meta name="twitter:description" content="本文主要参照MSDN文档，以windows为例，讲述socket编程中SO_LINGER选项的使用  SO_LINGER选项用以用以设定一个socket在关闭时队列中的待发送数据如何处理以及closesocket函数，该结构定义如下： 1234typedef struct linger &amp;#123;  u_short l_onoff;  u_short l_linger;&amp;#125; LINGE">
 
 
 
@@ -119,13 +120,13 @@
 
 
 
-  <link rel="canonical" href="http://yoursite.com/archives/2019/02/">
+  <link rel="canonical" href="http://yoursite.com/2019/03/09/so-linger/">
 
 
 
 
 
-  <title>Archive | Leesine's Blog</title>
+  <title>SO_LINGER选项使用方式 | Leesine's Blog</title>
   
 
 
@@ -144,7 +145,7 @@
     
   
 
-  <div class="container sidebar-position-left page-archive">
+  <div class="container sidebar-position-left page-post-detail">
     <div class="headband"></div>
 
     <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
@@ -218,72 +219,188 @@
           <div id="content" class="content">
             
 
+  <div id="posts" class="posts-expand">
+    
+
+  
+
   
   
   
-  <div class="post-block archive">
-    <div id="posts" class="posts-collapse">
-      <span class="archive-move-on"></span>
-
-      <span class="archive-page-counter">
-        
-        
-        
-          
-        
-        Um..! 11 posts in total. Keep on posting.
-      </span>
-
-      
-
-        
-        
-        
-
-        
-          
-          <div class="collection-title">
-            <h1 class="archive-year" id="archive-year-2019">2019</h1>
-          </div>
-        
-        
-
-        
 
   <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
-    <header class="post-header">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/09/so-linger/">
 
-      <h2 class="post-title">
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
         
-            <a class="post-title-link" href="/2019/02/26/data-reaches-disk/" itemprop="url">
-              
-                <span itemprop="name">确保数据到达磁盘</span>
-              
-            </a>
         
-      </h2>
+          <h1 class="post-title" itemprop="name headline">SO_LINGER选项使用方式</h1>
+        
 
-      <div class="post-meta">
-        <time class="post-time" itemprop="dateCreated" datetime="2019-02-26T21:04:37+08:00" content="2019-02-26">
-          02-26
-        </time>
-      </div>
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-03-09T23:19:03+08:00">
+                2019-03-09
+              </time>
+            
 
-    </header>
-  </article>
+            
 
+            
+          </span>
 
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
 
       
+      
 
+      
+        <blockquote>
+<p>本文主要参照MSDN文档，以windows为例，讲述socket编程中<code>SO_LINGER</code>选项的使用</p>
+</blockquote>
+<p>SO_LINGER选项用以用以设定一个socket在关闭时队列中的待发送数据如何处理以及<code>closesocket</code>函数，该结构定义如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">linger</span> &#123;</span></span><br><span class="line">  u_short l_onoff;</span><br><span class="line">  u_short l_linger;</span><br><span class="line">&#125; LINGER, *PLINGER, *LPLINGER;</span><br></pre></td></tr></table></figure>
+<h2 id="成员"><a href="#成员" class="headerlink" title="成员"></a>成员</h2><h3 id="l-onoff"><a href="#l-onoff" class="headerlink" title="l_onoff"></a>l_onoff</h3><p>标识在调用<code>closesocket</code>后该socket是否仍停留一段时间从而使得队列中的数据发送出去，这个成员可以有如下取值:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">取值</th>
+<th style="text-align:center">含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">0</td>
+<td style="text-align:center">close函数立即返回，socket关闭，数据由后台发送，应用层不再知晓</td>
+</tr>
+<tr>
+<td style="text-align:center">非0</td>
+<td style="text-align:center">socket会停留一段时间</td>
+</tr>
+</tbody>
+</table>
+<h3 id="l-linger"><a href="#l-linger" class="headerlink" title="l_linger"></a>l_linger</h3><table>
+<thead>
+<tr>
+<th style="text-align:center">取值</th>
+<th style="text-align:center">含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">0</td>
+<td style="text-align:center">close函数立即返回，数据丢弃，发送<code>RST</code>报文该服务端，服务端收到后立即管理连接，这样可以不经过四次挥手来关闭连接</td>
+</tr>
+<tr>
+<td style="text-align:center">非0</td>
+<td style="text-align:center">close函数阻塞到超时时间，若为发送完成则发送<code>RST</code>报文</td>
+</tr>
+</tbody>
+</table>
+
+      
     </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/网络/" rel="tag"># 网络</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/03/07/hardware-architecture/" rel="next" title="内存知识之现代商用硬件架构">
+                <i class="fa fa-chevron-left"></i> 内存知识之现代商用硬件架构
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
   </div>
   
   
   
+  </article>
 
-  
 
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
 
 
           </div>
@@ -291,6 +408,10 @@
 
 
           
+
+  
+
+
 
         </div>
         
@@ -311,8 +432,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
 
-      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+      <section class="site-overview-wrap sidebar-panel">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
             
@@ -379,6 +509,22 @@
         </div>
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#成员"><span class="nav-number">1.</span> <span class="nav-text">成员</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#l-onoff"><span class="nav-number">1.1.</span> <span class="nav-text">l_onoff</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#l-linger"><span class="nav-number">1.2.</span> <span class="nav-text">l_linger</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       
@@ -512,6 +658,10 @@
   
 
   
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
 
   
 
