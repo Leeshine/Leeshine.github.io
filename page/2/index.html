@@ -233,6 +233,190 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/09/crush/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2018/11/09/crush/" itemprop="url">CRUSH算法</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2018-11-09T20:51:25+08:00">
+                2018-11-09
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>在大型分布式存储系统中，如果使用哈希分布的方式来将数据打散的话有两个问题需要考虑：</p>
+<ul>
+<li>如果系统中有设备发生变化，如何在迁移最少数据量的情况下保持系统平衡</li>
+<li>数据的多个副本之间要如何分布才能使数据有较高的可靠性</li>
+</ul>
+<p>显而易见，普通哈希函数是较难解决以上两个问题的，而CRUSH（Controlled Replication Under Scalable Hashing）就是一个在普通哈希之上进行扩展用以解决以上两个问题的数据分布算法。</p>
+<p>CRUSH具有如下特点：</p>
+<ul>
+<li>以数据唯一标识、当前存储集群拓扑结构、数据备份策略作为输入，返回一组存储设备用以保存数据副本</li>
+<li>只需保存很少元数据（cluster map），只有当设备发生变化时，才会修改这些元数据</li>
+<li>用公式描述就是CRUSH(X) –&gt; (OSD1, OSD2, OSD…)，其中输入参数包括X（pgid），cluster map，placement rule</li>
+</ul>
+<h2 id="Cluster-Map"><a href="#Cluster-Map" class="headerlink" title="Cluster Map"></a>Cluster Map</h2><p>cluster map描述了ceph集群中有层级关系的静态拓扑结构，这样使得CRUSH在选择OSD时有机架感知能力，配合预先定义的placement rule（分布规则），就可以使副本分布在不同机架、机房中，提高数据的可用性。cluster map中包含如下概念：</p>
+<ul>
+<li>Device：OSD，一个OSD对应一个存储设备</li>
+<li>Bucket：设备容器，可以递归包含多个设备或者子类型bucket。目前有root、region、datacenter、room、rack、host等，每个device都有自己的权重，bucket的权重就是子bucket和device的权重之和</li>
+</ul>
+<h2 id="Placement-rule"><a href="#Placement-rule" class="headerlink" title="Placement rule"></a>Placement rule</h2><p>通过cluster map来建立集群对应的拓扑结构后，就可以通过placement rule来描述数据分布规则。每条placement rule包含多个操作，这些操作总总共有3种类型：</p>
+<ul>
+<li>take：选择每个bucket，以此为后续步骤的输入</li>
+<li>choose：从输入的bucket中选择指定类型和数量的items</li>
+<li>emit：返回最终结果</li>
+</ul>
+<p>一个典型的placement rule有如下定义格式：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">take a</span><br><span class="line">choose </span><br><span class="line">	choose firstn &#123;num&#125; type &#123;bucket-type&#125;</span><br><span class="line">	chooseleaf firstn &#123;num&#125; type &#123;bucket-type&#125;</span><br><span class="line">		if &#123;num&#125; == 0, choose &#123;pool-num-replicas&#125; buckets </span><br><span class="line">		if &#123;num&#125; &gt; 0 &amp;&amp; &lt; &#123;pool-num-replicas&#125;, choose &#123;num&#125; buckets</span><br><span class="line">		if &#123;num&#125; &lt; 0, choose &#123;pool-num-replicas&#125; - |&#123;num&#125;| buckets</span><br><span class="line">emit</span><br></pre></td></tr></table></figure>
+<p>对应的流程如下：</p>
+<p>1） take a ：选择a这个bucket，一般为root类型的bucket</p>
+<p>2）choose操作有不通的选择方式，其输入都是上一步的输出：</p>
+<ul>
+<li>choose firstn 选出num 个类型为bucket-type类型的bucket</li>
+<li>chooseleaf  先选出num个类型为bucket-type类型的bucket，然后递归到叶节点，选出一个OSD设备：<ul>
+<li>如果num为0，则num被设置为pool的副本数</li>
+<li>如果num大于0且小于pool的副本数，则选择num个</li>
+<li>如果num小于0，则选择pool的副本数减去|num|个</li>
+</ul>
+</li>
+</ul>
+<p>3） emit：输出结果</p>
+<p>其中chooseleaf firstn {num} {bucket_-type}可以等价为以下两个操作：</p>
+<p>​    a）choose firstn {num} {bucket-type}</p>
+<p>​    b） choose first 1 osd</p>
+<p>如下为一个集群中使用的placement rule实例，采用将3副本分布在不同主机上的容灾模式：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">root default &#123;</span><br><span class="line">        id -1           # do not change unnecessarily</span><br><span class="line">        id -2 class hdd         # do not change unnecessarily</span><br><span class="line">        # weight 305.650</span><br><span class="line">        alg straw2</span><br><span class="line">        hash 0  # rjenkins1</span><br><span class="line">        item default-100.98.49.161 weight 43.664</span><br><span class="line">        item default-100.98.46.210 weight 43.664</span><br><span class="line">        item default-100.98.49.174 weight 43.664</span><br><span class="line">        item default-100.98.49.234 weight 43.664</span><br><span class="line">        item default-100.98.49.229 weight 43.664</span><br><span class="line">        item default-100.98.49.251 weight 43.664</span><br><span class="line">        item default-100.98.49.224 weight 43.664</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">rule cos_rep_default_host &#123;</span><br><span class="line">        id 7</span><br><span class="line">        type replicated</span><br><span class="line">        min_size 1</span><br><span class="line">        max_size 10</span><br><span class="line">        step take default</span><br><span class="line">        step chooseleaf firstn 0 type host</span><br><span class="line">        step emit</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="Bucket-选择算法"><a href="#Bucket-选择算法" class="headerlink" title="Bucket 选择算法"></a>Bucket 选择算法</h2><p>前文描述了CRUSH算法的运行流程，下面来看如何从bucket总选择子item的问题，主要来看有实际使用价值的straw即straw2算法。</p>
+<p>顾名思义，straw算法针对特定输入，为每个元素计算一个签长，从中选择长度最长者作为结果输出。每个签长的计算跟元素自身的权重是有关系的，权重越高，被选中的概率就越高。此时，straw的算法执行结果取决于三个因素：固定输入、元素编号及元素权重，其中元素编号是起随机种子的作用，用以在选择失败后进行重试可以得出不同结果，所以针对特定输入（在ceph里就是pgid），straw的算法只受元素权重的影响。进一步来讲，如果每个元素的签长只和自身权重有关，则可以证明此事straw算法对于集群item变更的处理是最优的，以添加元素为例来说明：</p>
+<p>1）假设当前集群中有n个元素：（e1 e2 e3 ….e<sub>n</sub>)</p>
+<p>2）向集群中添加新元素e<sub>n+1</sub>，(e1 e2 … e<sub>n</sub>, e<sub>n+1</sub>) </p>
+<p>3）假设在n+1加入之前，针对任意输入X，分别计算每个元素的签长为(d1 d2 … d<sub>n</sub>)，并假定其中最大值为d<sub>max</sub>：</p>
+<p>4）因为新元素的签长计算只和其自身编号有关，且它的加入不会影响其他元素的签长计算，假设针对输入X，新元素的签长为d<sub>n+1</sub></p>
+<p>5）因为straw算法是以最长签长元素作为输入的，如果d<sub>n+1</sub> &gt; d<sub>max</sub>，那么X将被重新映射至新元素e<sub>n+1</sub>，否则则对X的已有映射结果无任何影响</p>
+<p>可见，在添加一个元素时，straw会随机得将一些元素映射至新添加的元素中，删除一个元素是，会将该元素中的全部数据随机重新映射，即元素的变更不会导致数据在变更的元素之间迁移（即不会导致额外的数据迁移）。但是原始straw算法在实际使用过程中却被发现会打来额外的数据迁移，社区被迫开始低该算法进行审视，原straw算法伪代码如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">max_x = -1</span><br><span class="line">max_item = -1</span><br><span class="line">for each item:</span><br><span class="line">	x = hash(input, r) * item_straw</span><br><span class="line">	if x &gt; max_x :</span><br><span class="line">		max_x = x</span><br><span class="line">		max_item = item</span><br><span class="line">return max_item</span><br></pre></td></tr></table></figure>
+<p>可见，算法的选择结果取决于每个元素输入（input）、随机因子（r）和item_straw（权重），但原有算法中item_straw的计算不但取决于每个元素自身的权重，也和集合中所有其他元素的权重相关，从而导致每个元素变化是会到来额外的数据迁移。新修正后的算法被称之为straw2，其伪代码如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">max_x = -1</span><br><span class="line">max_item = -1</span><br><span class="line">for each item:</span><br><span class="line">	x = hash(input, r) #输出落在[0, 65535]之间</span><br><span class="line">	x = ln(x / 65536) / weight</span><br><span class="line">	if x &gt; max_x :</span><br><span class="line">		max_x = x</span><br><span class="line">		max_item = item</span><br><span class="line">return max_item</span><br></pre></td></tr></table></figure>
+<h2 id="CRUSH分析"><a href="#CRUSH分析" class="headerlink" title="CRUSH分析"></a>CRUSH分析</h2><p>理论上来讲，只要选择一个好的哈希函数及合理的权重分配，CRUSH算法是能够保证数据在所有磁盘之间均匀分布的，但是实际使用过程中存在如下问题：</p>
+<ul>
+<li>集群规模较小时，输入样本不够，不一定能保证数据的均衡</li>
+<li>CRUSH算法本身是有缺陷的，前文描述的straw2每次选择item都是计算其独立概率的，但是在实际过程中为了考虑副本的分布策略，却变成了针对item计算条件概率，所以CRUSH也无法真正处理好多副本模式下的副本均匀分布问题</li>
+<li>设备的权重一般是根据其容量计算得来的，但是容量更大的硬盘不代表性能更高。所以针对异构集群（特质存在容量不一的OSD设备），CRUSH无法较好处理这种情况</li>
+</ul>
+<p>因此在实际使用过程中，是允许对CRUSH的计算结果进行人工调整的。在CEPH中，每个设备除了有一个权重之外，还有一个外的reweight，CRUSH在正常选中一个OSD后，还会基于该reweight对OSD进行测试，如果测试失败，则拒绝选择该OSD，reweight调的越高，则测试通过率就越高。</p>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li>Ceph设计原理与实现 [谢型果 等]</li>
+<li>Ceph源码分析 [常涛 等]</li>
+</ul>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/09/linux-memory-manage/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -444,7 +628,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">11</span>
+                  <span class="site-state-item-count">12</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>

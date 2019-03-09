@@ -68,7 +68,7 @@
 
 
 
-  <meta name="keywords" content="存储,leveldb,">
+  <meta name="keywords" content="leveldb,存储,">
 
 
 
@@ -80,7 +80,7 @@
 
 
 <meta name="description" content="PUTLevelDB的写入性能较高，整体步骤就是先写wal日志再写入memtable中，由于wal日志是append写入的，性能较高，所以写入一般不存在瓶颈。但是如果写入速度过快，导致memtable来不及flush或者lelvel 0中的文件数较多时，系统的写入可能会被限制，这就是LevelDB的write stall问题，整体写入流程如下： 12345678910111213141516171">
-<meta name="keywords" content="存储,leveldb">
+<meta name="keywords" content="leveldb,存储">
 <meta property="og:type" content="article">
 <meta property="og:title" content="LevelDB之读写流程">
 <meta property="og:url" content="http://yoursite.com/2019/01/24/leveldb-put-get/index.html">
@@ -321,9 +321,9 @@
       
         <div class="post-tags">
           
-            <a href="/tags/存储/" rel="tag"># 存储</a>
-          
             <a href="/tags/leveldb/" rel="tag"># leveldb</a>
+          
+            <a href="/tags/存储/" rel="tag"># 存储</a>
           
         </div>
       
@@ -425,7 +425,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">11</span>
+                  <span class="site-state-item-count">12</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>
