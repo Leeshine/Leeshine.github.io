@@ -233,6 +233,161 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/17/stack-of-fuc-call/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2019/03/17/stack-of-fuc-call/" itemprop="url">C++函数调用栈过程</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-03-17T07:36:38+08:00">
+                2019-03-17
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h2 id="函数压栈过程"><a href="#函数压栈过程" class="headerlink" title="函数压栈过程"></a>函数压栈过程</h2><p>以如下代码为例来分析C++中函数调用过程中，栈是如何变化的：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> <span class="built_in">std</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">foo</span><span class="params">(<span class="keyword">int</span> sp1, <span class="keyword">int</span> sp2)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">int</span> res = sp1 + sp2;</span><br><span class="line">  <span class="keyword">return</span> res;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="keyword">int</span> res =  foo(<span class="number">1</span>, <span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">cout</span> &lt;&lt; res &lt;&lt; <span class="built_in">endl</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在Linux进程的地址空间中，栈是位于进程的高地址位置，且栈顶是向下增长的，每次的函数调用都有它自己独立的一个栈帧，用以记录这个函数调用过程中所需的信息，包括函数返回地址、参数、临时变量、保存的上下文等。其中有两个寄存器非常重要，分别<code>esp</code>和<code>ebp</code>，分别记录当前栈帧的栈顶位置和栈底位置，（对于<code>X86-64</code>平台上来说，对应的寄存器则为<code>rsp</code>及<code>rbp</code>），压栈使<code>esp</code>变小。一个典型的栈帧如下所示：</p>
+<p><img src="/images/linux/stack1.png" alt=""></p>
+<p>从参数开始的数据即是当前函数的栈帧，<code>ebp</code>的位置在运行过程中是固定的，而<code>esp</code>始终指向栈顶，在运行过程中是会发生变化的，而参数及返回地址之所以在<code>ebp</code>之上是因为这个两项是由该函数的调用者进行压栈的。<code>ebp</code>指向的<code>old ebp</code>是函数调用者的<code>ebp</code>值，这样该函数退出后通过<code>old ebp</code>即可恢复调用者的栈帧。</p>
+<p>将示例代码编译后，通过gdb进行反汇编，首先来看<code>main</code>函数，如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disassemble main</span><br><span class="line">Dump of assembler code for function main():</span><br><span class="line">   <span class="number">0x0000000000400830</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp </span><br><span class="line">   <span class="number">0x0000000000400831</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp</span><br><span class="line">   <span class="number">0x0000000000400834</span> &lt;+<span class="number">4</span>&gt;:	sub    $<span class="number">0x10</span>,%rsp</span><br><span class="line">   <span class="number">0x0000000000400838</span> &lt;+<span class="number">8</span>&gt;:	mov    $<span class="number">0x2</span>,%esi #将foo第二个参数存入寄存器中</span><br><span class="line">   <span class="number">0x000000000040083d</span> &lt;+<span class="number">13</span>&gt;:	mov    $<span class="number">0x1</span>,%edi #将foo的第一个参数存入寄存器中</span><br><span class="line">   <span class="number">0x0000000000400842</span> &lt;+<span class="number">18</span>&gt;:	callq  <span class="number">0x400816</span> &lt;foo(<span class="keyword">int</span>, <span class="keyword">int</span>)&gt; # 调用foo</span><br><span class="line">   <span class="number">0x0000000000400847</span> &lt;+<span class="number">23</span>&gt;:	mov    %eax,<span class="number">-0x4</span>(%rbp)</span><br><span class="line">   <span class="number">0x000000000040084a</span> &lt;+<span class="number">26</span>&gt;:	mov    <span class="number">-0x4</span>(%rbp),%eax</span><br><span class="line">   <span class="number">0x000000000040084d</span> &lt;+<span class="number">29</span>&gt;:	mov    %eax,%esi</span><br><span class="line">   <span class="number">0x000000000040084f</span> &lt;+<span class="number">31</span>&gt;:	mov    $<span class="number">0x601060</span>,%edi</span><br><span class="line">   <span class="number">0x0000000000400854</span> &lt;+<span class="number">36</span>&gt;:	callq  <span class="number">0x4006a0</span> &lt;_ZNSolsEi@plt&gt;</span><br><span class="line">   <span class="number">0x0000000000400859</span> &lt;+<span class="number">41</span>&gt;:	mov    $<span class="number">0x400700</span>,%esi</span><br><span class="line">   <span class="number">0x000000000040085e</span> &lt;+<span class="number">46</span>&gt;:	mov    %rax,%rdi</span><br><span class="line">   <span class="number">0x0000000000400861</span> &lt;+<span class="number">49</span>&gt;:	callq  <span class="number">0x4006f0</span> &lt;_ZNSolsEPFRSoS_E@plt&gt;</span><br><span class="line">   <span class="number">0x0000000000400866</span> &lt;+<span class="number">54</span>&gt;:	mov    $<span class="number">0x0</span>,%eax</span><br><span class="line">   <span class="number">0x000000000040086b</span> &lt;+<span class="number">59</span>&gt;:	leaveq </span><br><span class="line">   <span class="number">0x000000000040086c</span> &lt;+<span class="number">60</span>&gt;:	retq</span><br></pre></td></tr></table></figure>
+<p>可以看到，参数是在调用foo之前传入的，参数可能是通过压栈的方式传入，也可能是通过寄存器传递，其中<code>call</code>指令用以调用<code>foo</code>函数，该指令也会将函数的返回地址进行压栈。下面来对foo进行反汇编，如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disassemble foo</span><br><span class="line">Dump of assembler code for function foo(int, int):</span><br><span class="line">   <span class="number">0x0000000000400816</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp #将老的rbp压栈</span><br><span class="line">   <span class="number">0x0000000000400817</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp # 将rbp指向rsp</span><br><span class="line">   <span class="number">0x000000000040081a</span> &lt;+<span class="number">4</span>&gt;:	mov    %edi,<span class="number">-0x14</span>(%rbp) #参数<span class="number">1</span>入栈</span><br><span class="line">   <span class="number">0x000000000040081d</span> &lt;+<span class="number">7</span>&gt;:	mov    %esi,<span class="number">-0x18</span>(%rbp) #参数<span class="number">2</span>入栈</span><br><span class="line">   <span class="number">0x0000000000400820</span> &lt;+<span class="number">10</span>&gt;:	mov    <span class="number">-0x14</span>(%rbp),%edx #参数<span class="number">1</span>存入edx</span><br><span class="line">   <span class="number">0x0000000000400823</span> &lt;+<span class="number">13</span>&gt;:	mov    <span class="number">-0x18</span>(%rbp),%eax #参数存<span class="number">2</span>入eax</span><br><span class="line">   <span class="number">0x0000000000400826</span> &lt;+<span class="number">16</span>&gt;:	add    %edx,%eax #执行加法运算，结果存储在eax中</span><br><span class="line">   <span class="number">0x0000000000400828</span> &lt;+<span class="number">18</span>&gt;:	mov    %eax,<span class="number">-0x4</span>(%rbp) #将运算结果赋值给result,它的位置为rbp<span class="number">-4</span></span><br><span class="line">   <span class="number">0x000000000040082b</span> &lt;+<span class="number">21</span>&gt;:	mov    <span class="number">-0x4</span>(%rbp),%eax #将result赋值给eax，eax为函数返回值</span><br><span class="line">   <span class="number">0x000000000040082e</span> &lt;+<span class="number">24</span>&gt;:	pop    %rbp #从栈中恢复保存的rbp,即恢复函数调用者的栈帧</span><br><span class="line">   <span class="number">0x000000000040082f</span> &lt;+<span class="number">25</span>&gt;:	retq  #从栈中取到返回地址，并跳转到该位置</span><br></pre></td></tr></table></figure>
+<p>从上述代码也可总结出，c++中一个函数调用(<code>foo</code>)过程是这样的：</p>
+<ol>
+<li>把该函数的所有或者部分参数入栈，或者将参数存入寄存器中</li>
+<li>把当前指令的下一条指令压如栈中</li>
+<li>跳转到函数<code>foo</code>内部执行</li>
+<li>将调用者的<code>ebp</code>值压栈保存(<code>push ebp</code>)</li>
+<li>重置<code>foo</code>函数的栈帧(<code>mov ebp esp</code>)</li>
+<li>执行相关操作</li>
+<li>执行完函数<code>foo</code>之后，恢复调用者的栈帧（<code>pop ebp</code>)</li>
+<li>跳转到下一指令继续执行</li>
+</ol>
+<h2 id="函数返回值传递"><a href="#函数返回值传递" class="headerlink" title="函数返回值传递"></a>函数返回值传递</h2><p>通过前文的发汇编代码也可看到，函数的返回值是通过<code>eax</code>来返回的，但是<code>eax</code>只能存储4个字节，那么对于大于4个字节的返回值是如何传递的呢，以如下代码为例来看:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> <span class="built_in">std</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">test4Bytes</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">test8Bytes</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">12345678901l</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">node</span> &#123;</span></span><br><span class="line">  <span class="keyword">long</span> l1;</span><br><span class="line">  <span class="keyword">long</span> l2;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">node <span class="title">testMoreBytes</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  node n1;</span><br><span class="line">  n1.l1 = <span class="number">1234567889l</span>;</span><br><span class="line">  n1.l2 = <span class="number">1234567889l</span>;</span><br><span class="line">  <span class="keyword">return</span> n1;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="keyword">int</span> s1 = test4Bytes();</span><br><span class="line"></span><br><span class="line">   <span class="keyword">long</span> s2 = test8Bytes();</span><br><span class="line"></span><br><span class="line">   node s3 = testMoreBytes();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>main</code>函数的反汇编结果如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disassemble main</span><br><span class="line">Dump of assembler code for function main():</span><br><span class="line">   <span class="number">0x000000000040077e</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp</span><br><span class="line">   <span class="number">0x000000000040077f</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp</span><br><span class="line">   <span class="number">0x0000000000400782</span> &lt;+<span class="number">4</span>&gt;:	sub    $<span class="number">0xa0</span>,%rsp</span><br><span class="line">   <span class="number">0x0000000000400789</span> &lt;+<span class="number">11</span>&gt;:	mov    %fs:<span class="number">0x28</span>,%rax</span><br><span class="line">   <span class="number">0x0000000000400792</span> &lt;+<span class="number">20</span>&gt;:	mov    %rax,<span class="number">-0x8</span>(%rbp)</span><br><span class="line">   <span class="number">0x0000000000400796</span> &lt;+<span class="number">24</span>&gt;:	xor    %eax,%eax</span><br><span class="line">   <span class="number">0x0000000000400798</span> &lt;+<span class="number">26</span>&gt;:	callq  <span class="number">0x400726</span> &lt;test4Bytes()&gt;</span><br><span class="line">   <span class="number">0x000000000040079d</span> &lt;+<span class="number">31</span>&gt;:	mov    %eax,<span class="number">-0x9c</span>(%rbp)</span><br><span class="line">   <span class="number">0x00000000004007a3</span> &lt;+<span class="number">37</span>&gt;:	callq  <span class="number">0x400731</span> &lt;test8Bytes()&gt;</span><br><span class="line">   <span class="number">0x00000000004007a8</span> &lt;+<span class="number">42</span>&gt;:	mov    %rax,<span class="number">-0x98</span>(%rbp)</span><br><span class="line">   <span class="number">0x00000000004007af</span> &lt;+<span class="number">49</span>&gt;:	lea    <span class="number">-0x90</span>(%rbp),%rax</span><br><span class="line">   <span class="number">0x00000000004007b6</span> &lt;+<span class="number">56</span>&gt;:	mov    %rax,%rdi</span><br><span class="line">   <span class="number">0x00000000004007b9</span> &lt;+<span class="number">59</span>&gt;:	callq  <span class="number">0x400741</span> &lt;testMoreBytes()&gt;</span><br><span class="line">   <span class="number">0x00000000004007be</span> &lt;+<span class="number">64</span>&gt;:	mov    $<span class="number">0x0</span>,%eax</span><br><span class="line">   <span class="number">0x00000000004007c3</span> &lt;+<span class="number">69</span>&gt;:	mov    <span class="number">-0x8</span>(%rbp),%rdx</span><br><span class="line">   <span class="number">0x00000000004007c7</span> &lt;+<span class="number">73</span>&gt;:	xor    %fs:<span class="number">0x28</span>,%rdx</span><br><span class="line">   <span class="number">0x00000000004007d0</span> &lt;+<span class="number">82</span>&gt;:	je     <span class="number">0x4007d7</span> &lt;main()+<span class="number">89</span>&gt;</span><br><span class="line">   <span class="number">0x00000000004007d2</span> &lt;+<span class="number">84</span>&gt;:	callq  <span class="number">0x400610</span> &lt;__stack_chk_fail@plt&gt;</span><br><span class="line">   <span class="number">0x00000000004007d7</span> &lt;+<span class="number">89</span>&gt;:	leaveq </span><br><span class="line">   <span class="number">0x00000000004007d8</span> &lt;+<span class="number">90</span>&gt;:	retq</span><br></pre></td></tr></table></figure>
+<p>从<code>main</code>函数的反汇编结果也可看出，前两个函数是分别是通过<code>eax</code>及<code>rax</code>来返回的。首先来看<code>test4Bytes</code>，如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disassemble test4Bytes</span><br><span class="line">Dump of assembler code for function test4Bytes():</span><br><span class="line">   <span class="number">0x0000000000400726</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp</span><br><span class="line">   <span class="number">0x0000000000400727</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp</span><br><span class="line">   <span class="number">0x000000000040072a</span> &lt;+<span class="number">4</span>&gt;:	mov    $<span class="number">0x1</span>,%eax</span><br><span class="line">   <span class="number">0x000000000040072f</span> &lt;+<span class="number">9</span>&gt;:	pop    %rbp</span><br><span class="line">   <span class="number">0x0000000000400730</span> &lt;+<span class="number">10</span>&gt;:	retq</span><br></pre></td></tr></table></figure>
+<p>如前文所述，4个字节的函数返回值是通过<code>eax</code>来传递的。而<code>test8Bytes</code>的反汇编结果如下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disassemble test8Bytes</span><br><span class="line">Dump of assembler code for function test8Bytes():</span><br><span class="line">   <span class="number">0x0000000000400731</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp</span><br><span class="line">   <span class="number">0x0000000000400732</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp</span><br><span class="line">   <span class="number">0x0000000000400735</span> &lt;+<span class="number">4</span>&gt;:	movabs $<span class="number">0x2dfdc1c35</span>,%rax</span><br><span class="line">   <span class="number">0x000000000040073f</span> &lt;+<span class="number">14</span>&gt;:	pop    %rbp</span><br><span class="line">   <span class="number">0x0000000000400740</span> &lt;+<span class="number">15</span>&gt;:	retq</span><br></pre></td></tr></table></figure>
+<p>可以看出，此时8个字节的返回值是通过<code>rax</code>来返回的，这个对于不同平台的实现来说可能是不一样的，例如在32位的机器上，一般是通过<code>eax</code>和<code>edx</code>组合来返回8个字节的返回值。上述<code>main</code>函数的反汇编代码中有段保护机制，为了简化无关代码的干绕，关闭端保护机制编译如下代码(<code>g++ -fno-stack-protector</code> )：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> <span class="built_in">std</span>;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">node</span> &#123;</span></span><br><span class="line">  <span class="keyword">char</span> buf[<span class="number">64</span>];</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function">node <span class="title">testMoreBytes</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  node n1;</span><br><span class="line">  n1.buf[<span class="number">0</span>] = <span class="string">'c'</span>;</span><br><span class="line">  <span class="keyword">return</span> n1;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   node s3 = testMoreBytes();</span><br><span class="line"></span><br><span class="line">   s3.buf[<span class="number">0</span>] = <span class="string">'a'</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"># 相应的反汇编结果分别为：</span><br><span class="line">(gdb) disassemble  main</span><br><span class="line">Dump of assembler code <span class="keyword">for</span> function main:</span><br><span class="line">   <span class="number">0x00000000004006e7</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp</span><br><span class="line">   <span class="number">0x00000000004006e8</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp</span><br><span class="line">   <span class="number">0x00000000004006eb</span> &lt;+<span class="number">4</span>&gt;:	sub    $<span class="number">0x40</span>,%rsp</span><br><span class="line">   <span class="number">0x00000000004006ef</span> &lt;+<span class="number">8</span>&gt;:	lea    <span class="number">-0x40</span>(%rbp),%rax</span><br><span class="line">   <span class="number">0x00000000004006f3</span> &lt;+<span class="number">12</span>&gt;:	mov    %rax,%rdi</span><br><span class="line">   <span class="number">0x00000000004006f6</span> &lt;+<span class="number">15</span>&gt;:	callq  <span class="number">0x4006d1</span> &lt;_Z13testMoreBytesv&gt;</span><br><span class="line">   <span class="number">0x00000000004006fb</span> &lt;+<span class="number">20</span>&gt;:	movb   $<span class="number">0x61</span>,<span class="number">-0x40</span>(%rbp)</span><br><span class="line">   <span class="number">0x00000000004006ff</span> &lt;+<span class="number">24</span>&gt;:	mov    $<span class="number">0x0</span>,%eax</span><br><span class="line">   <span class="number">0x0000000000400704</span> &lt;+<span class="number">29</span>&gt;:	leaveq </span><br><span class="line">   <span class="number">0x0000000000400705</span> &lt;+<span class="number">30</span>&gt;:	retq  </span><br><span class="line">End of assembler dump.</span><br><span class="line">(gdb) disassemble testMoreBytes</span><br><span class="line">Dump of assembler code <span class="keyword">for</span> function _Z13testMoreBytesv:</span><br><span class="line">   <span class="number">0x00000000004006d1</span> &lt;+<span class="number">0</span>&gt;:	push   %rbp</span><br><span class="line">   <span class="number">0x00000000004006d2</span> &lt;+<span class="number">1</span>&gt;:	mov    %rsp,%rbp</span><br><span class="line">   <span class="number">0x00000000004006d5</span> &lt;+<span class="number">4</span>&gt;:	mov    %rdi,<span class="number">-0x8</span>(%rbp)</span><br><span class="line">   <span class="number">0x00000000004006d9</span> &lt;+<span class="number">8</span>&gt;:	mov    <span class="number">-0x8</span>(%rbp),%rax</span><br><span class="line">   <span class="number">0x00000000004006dd</span> &lt;+<span class="number">12</span>&gt;:	movb   $<span class="number">0x63</span>,(%rax)</span><br><span class="line">   <span class="number">0x00000000004006e0</span> &lt;+<span class="number">15</span>&gt;:	nop</span><br><span class="line">   <span class="number">0x00000000004006e1</span> &lt;+<span class="number">16</span>&gt;:	mov    <span class="number">-0x8</span>(%rbp),%rax</span><br><span class="line">   <span class="number">0x00000000004006e5</span> &lt;+<span class="number">20</span>&gt;:	pop    %rbp</span><br><span class="line">   <span class="number">0x00000000004006e6</span> &lt;+<span class="number">21</span>&gt;:	retq    </span><br><span class="line">End of assembler dump.</span><br></pre></td></tr></table></figure>
+<p>从<code>main</code>的反汇编结果可以看出，它先是分配了64字节的一个堆栈空间，然后将该地址空间保存在<code>rax</code>中，然后将<code>rax</code>的值传入<code>rdi</code>中，紧接着便调用<code>testMoreBytes</code>函数，显而易见的是它是要将分配的这一段空间传递给<code>testMoreBytes</code>函数。而通过<code>testMoreBytes</code>的反汇编结果可以看出，它显示从<code>rdi</code>中取出这段地址，并将地址赋值给<code>rax</code>，最后再将值拷贝到这段地址空间处，所以此时函数返回值的传递过程是：</p>
+<ol>
+<li><code>main</code>函数会在堆栈中额外开辟一段空间，用以存储返回值</li>
+<li>将上述空间的地址传递给<code>testMoreBytes</code>函数，函数内部将值拷贝到该空间处</li>
+<li><code>main</code>函数通过该端空间来读取返回值</li>
+</ol>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/09/close-socket-gracefully/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -1924,178 +2079,6 @@
 
 
     
-      
-
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/09/paxos-introduction/">
-
-    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Leeshine">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/avatar.gif">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Leesine's Blog">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/11/09/paxos-introduction/" itemprop="url">PAXOS简介</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">Posted on</span>
-              
-              <time title="Post created" itemprop="dateCreated datePublished" datetime="2018-11-09T21:02:11+08:00">
-                2018-11-09
-              </time>
-            
-
-            
-
-            
-          </span>
-
-          
-
-          
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          
-            <h2 id="推导过程"><a href="#推导过程" class="headerlink" title="推导过程"></a>推导过程</h2><p>对于一致性算法来说，安全性要求如下：</p>
-<ul>
-<li>只有被提出的方案才能被选定（chosen）</li>
-<li>只有一个值能被选定</li>
-<li>进程不会学习某个方案，除非这个方案真正被选定了</li>
-</ul>
-<p>Paxos就是一个满足上述需求的一致性算法，它的目标是确保最终有一个方案能被选定，然后被所有进程学习，Paxos中有三种角色：<code>proposers</code> , <code>acceptors</code>, <code>learners</code>，所有的角色都能互通信，并由如下前提：</p>
-<ul>
-<li>agent以不固定速度运行，可能会停止或者重启。因为即使一个提案被选定了，agent也可能重启，因此被选定的提案能持久化存储，否则无法确定最终的值</li>
-<li>消息在传输过程中可能会丢失、重复，等内容不会被篡改</li>
-</ul>
-<p>首先，即使只有一个提案被提出，我们仍要确保最终有一个方案会被选定，这就暗示这如下需求：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P1: 一个Acceptor必须批准它接收到的第一个提案</span><br></pre></td></tr></table></figure>
-<p>但是这个需求会引出新的问题：如果有多个提案被多个Proposer同时提出，会导致每个Acceptor都批准了一个提案，但没有哪个提案被多数派批准。因此在P1基础上，为了确保最终有提案能被多数派批准，这就意味着一个Acceptor必须能批准不止一个提案，我们使用一个全局唯一的编号来唯一标识每一个被Acceptor批准的提案，此时可以用<code>[编号，value]</code>来表示一个提案，当一个提案被多数派批准之后，我们就说这个提案被选定了（chosen）。我们可以允许多个提案被选定，但是我们必须确保被选定的提案都具有相同的值，即有如下需求：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2: 如果一个值为V的提案被选定了，那么被选定(chosen)的更高编号的提案的值也必须为V</span><br></pre></td></tr></table></figure>
-<p>因为编号是全局有序递增的，这样才能确保最终只有一个值能被选定。一个提案被选定意味它至少被一个Acceptor批准，因此我们可以满足如下条件来满足P2：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2a: 如果一个值为V的提案被选定了，那么被批准(accept)的更高编号的提案的值也必须为V</span><br></pre></td></tr></table></figure>
-<p>此时，我们仍需满足P1，但因为通信是异步的，一个提案（[M0, V0]）可能会在某个Acceptor还未收到任何提案时就被选定了，如果此时某个Proposer产生了一个编号更高，值不为V0提案（[M1, V1], M1&gt;M0, V1 != V0）发送至该Acceptor，那么该提案就会被批准，但这会与P2a相矛盾，因此对P2a进行强化如下：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2b: 如果一个值为V的提案被选定了，那么之后任何Proposer产生的编号更高的提案，其值都必须为V</span><br></pre></td></tr></table></figure>
-<p>因此我们满足P2b即可满足P2。接下来我们来讨论如何满足P2b，即如何满足<code>在[M0, V0]被选定时,所有编号Mn &gt; M0的提案，其值也为V0</code>。只需要满足如下约束即可：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">P2c: 如果提案[Mn, Vn]被提出，那么肯定存在一个由半数以上Acceptor组成的集合S，满足如下两个条件之一：</span><br><span class="line">- S中的所有Acceptor都没有批准过编号小于Mn的提案</span><br><span class="line">- S中所有Acceptor批准的最大编号的提案的值为Vn</span><br></pre></td></tr></table></figure>
-<p>下面我们来证明P2c成立的话，P2b也一定成立。我们可以使用第二数学归纳法来证明，即首先假设提案[M0, V0]被选定了，证明过程如下：</p>
-<ol>
-<li>当Mn = M0 + 1时，因为M0已经被选定了，那么肯定不存在一个多数派集合S，其中所有Acceptor都没有批准过编号小于Mn的提案，即P2c中第一个条件肯定不成立了，所以肯定存在多数派Acceptor集合S1，其批准的最大编号的提案只为Vn，因为M0被选定了，所有肯定存在多数派Acceptor集合C，C中每个Acceptor都批准了M0这个提案，因为C与S1必然有交集，所以S1中最大编号的提案一定为M0，所以此时Vn必然等于V0</li>
-<li>根据第二数学归纳法，假设编号M0+1 值Mn-1 范围内的所有提案值都为V0，那么如何证明Mn提案的值也为V0呢？根据P2c，肯定存在一个多数派集合S，S中的Acceptor批准了编号小于Mn的提案，且它批准的最大编号的提案的值肯定为Vn，假设这个最大编号落在[M0+1, Mn-1]区间内，则Vn肯定等于V0，若不在这个区间内，那最大编号肯定为M0，此时Vn也肯定等于V0</li>
-</ol>
-<p>由此可证明，在P2c的约束条件下，P2b是成立的。从上可看到，从P1到P2c的过程其实是一系列条件的加强，由P2c进行反向推导就可保证P2的成立。将条件逐步加强后，就可以推导出提案的生成步骤了，下面我们来看应该如何满足P2c。</p>
-<h2 id="提案流程"><a href="#提案流程" class="headerlink" title="提案流程"></a>提案流程</h2><h3 id="Proposer生成提案"><a href="#Proposer生成提案" class="headerlink" title="Proposer生成提案"></a>Proposer生成提案</h3><p>下面来看在P2c的基础上如何来生成提案。对于Proposer来说，学习已经被批准或即将批准的提案肯定比预测未来被批准的提案更容易，因此，Proposer在生成提案N时，它需要学习这样一个提案M，M被多数派Acceptor批准且M为小于N中提案中编号最大的提案（如果这个提案存在的话）。既然预测未来提案较难，Proposer可以采取一些方法来反正其他提案（值不相同）被批准，Paxos中采用的方法就是Proposer会要求Acceptor不再批准编号小于N的提案，这就引出了如下提案生成算法：</p>
-<p>1.<strong>Prepare阶段</strong><br>Proposer获取一个提案编号N，然后向某个多数派Acceptor集合发出请求，要求集合中的Acceptor做出如下回应：</p>
-<ul>
-<li>不再批准任何编号小于N的提案</li>
-<li>反馈已批准的编号小于N中编号最大的提案（如果有的话）</li>
-</ul>
-<p>2.<strong>Accept阶段</strong><br>Proposer在接收到半数以上Acceptor的回复之后，生成编号为N的提案[N, V]，V就是在Prepare阶段中所有响应中编号最大的提案的值，如果这些Acceptor都没有批准过任何值的话，V的值就由Proposer决定</p>
-<p>在确定提案后，Proposer就会将提案再次发送个半数以上的Acceptor集合，此为Accept请求。需要注意的是，此时的多数派集合跟Prepare阶段的多数派集合并不是一定相等的。</p>
-<h3 id="Acceptor批准提案"><a href="#Acceptor批准提案" class="headerlink" title="Acceptor批准提案"></a>Acceptor批准提案</h3><p>下面来看Acceptor的处理逻辑，Acceptor会接收到两种请求：prepare及accept，它的处理分别如下：</p>
-<ul>
-<li>Prepare请求：可以在任何时间响应</li>
-<li>Accept请求：在不违背承诺的前提下课任意响应，</li>
-</ul>
-<p>即Acceptor批准提案的约束条件如下：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P1a: 只有在没有响应过任何编号大于N的prepare请求时，它才能批准这个编号为N的提案</span><br></pre></td></tr></table></figure>
-<h3 id="算法整体流程"><a href="#算法整体流程" class="headerlink" title="算法整体流程"></a>算法整体流程</h3><p>结合前文内容，可以得到如下类似两阶段提交的Paxos算法执行流程：</p>
-<h4 id="阶段一"><a href="#阶段一" class="headerlink" title="阶段一"></a>阶段一</h4><ol>
-<li>Proposer获取一个提案编号N，然后向一个多数派Acceptor集合发送Prepare请求</li>
-<li>如果一个Acceptor接收到一个编号为N的Prepare请求，且N大于它已经响应的所有Prepare请求的编号，它会将自己批准过的编号最大的提案值反馈给Proposer，同时该Acceptor不会再批准任何编号小于N的提案</li>
-</ol>
-<h4 id="阶段二"><a href="#阶段二" class="headerlink" title="阶段二"></a>阶段二</h4><ol>
-<li>如果Proposer收到半数以上Acceptor的Prepare响应，它就会发送提案为[N, V]的Accept请求至一个多数派Acceptor集合，其中V为响应的prepare请求中编号最大的提案值，如果这个值不存在则V会有该Proposer自行生成</li>
-<li>一个Acceptor接收到[N, V]这个提案后，只要它没有响应过编号大于N的Prepare请求，它就可以批准这个提案 </li>
-</ol>
-<p>在实际使运行过程中，一个proposer可能会产生多个提案，但只要遵循上述流程，就一定能得到最终的正确结果，且一个proposer可以在任意时刻丢弃一个提案。</p>
-<h2 id="实际使用"><a href="#实际使用" class="headerlink" title="实际使用"></a>实际使用</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TO DO</span><br></pre></td></tr></table></figure>
-
-          
-        
-      
-    </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
   </section>
 
   
@@ -2146,7 +2129,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">12</span>
+                  <span class="site-state-item-count">13</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>
@@ -2159,7 +2142,7 @@
               
               <div class="site-state-item site-state-tags">
                 
-                  <span class="site-state-item-count">9</span>
+                  <span class="site-state-item-count">10</span>
                   <span class="site-state-item-name">tags</span>
                 
               </div>

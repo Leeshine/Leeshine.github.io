@@ -233,6 +233,178 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/09/paxos-introduction/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2018/11/09/paxos-introduction/" itemprop="url">PAXOS简介</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2018-11-09T21:02:11+08:00">
+                2018-11-09
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h2 id="推导过程"><a href="#推导过程" class="headerlink" title="推导过程"></a>推导过程</h2><p>对于一致性算法来说，安全性要求如下：</p>
+<ul>
+<li>只有被提出的方案才能被选定（chosen）</li>
+<li>只有一个值能被选定</li>
+<li>进程不会学习某个方案，除非这个方案真正被选定了</li>
+</ul>
+<p>Paxos就是一个满足上述需求的一致性算法，它的目标是确保最终有一个方案能被选定，然后被所有进程学习，Paxos中有三种角色：<code>proposers</code> , <code>acceptors</code>, <code>learners</code>，所有的角色都能互通信，并由如下前提：</p>
+<ul>
+<li>agent以不固定速度运行，可能会停止或者重启。因为即使一个提案被选定了，agent也可能重启，因此被选定的提案能持久化存储，否则无法确定最终的值</li>
+<li>消息在传输过程中可能会丢失、重复，等内容不会被篡改</li>
+</ul>
+<p>首先，即使只有一个提案被提出，我们仍要确保最终有一个方案会被选定，这就暗示这如下需求：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P1: 一个Acceptor必须批准它接收到的第一个提案</span><br></pre></td></tr></table></figure>
+<p>但是这个需求会引出新的问题：如果有多个提案被多个Proposer同时提出，会导致每个Acceptor都批准了一个提案，但没有哪个提案被多数派批准。因此在P1基础上，为了确保最终有提案能被多数派批准，这就意味着一个Acceptor必须能批准不止一个提案，我们使用一个全局唯一的编号来唯一标识每一个被Acceptor批准的提案，此时可以用<code>[编号，value]</code>来表示一个提案，当一个提案被多数派批准之后，我们就说这个提案被选定了（chosen）。我们可以允许多个提案被选定，但是我们必须确保被选定的提案都具有相同的值，即有如下需求：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2: 如果一个值为V的提案被选定了，那么被选定(chosen)的更高编号的提案的值也必须为V</span><br></pre></td></tr></table></figure>
+<p>因为编号是全局有序递增的，这样才能确保最终只有一个值能被选定。一个提案被选定意味它至少被一个Acceptor批准，因此我们可以满足如下条件来满足P2：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2a: 如果一个值为V的提案被选定了，那么被批准(accept)的更高编号的提案的值也必须为V</span><br></pre></td></tr></table></figure>
+<p>此时，我们仍需满足P1，但因为通信是异步的，一个提案（[M0, V0]）可能会在某个Acceptor还未收到任何提案时就被选定了，如果此时某个Proposer产生了一个编号更高，值不为V0提案（[M1, V1], M1&gt;M0, V1 != V0）发送至该Acceptor，那么该提案就会被批准，但这会与P2a相矛盾，因此对P2a进行强化如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P2b: 如果一个值为V的提案被选定了，那么之后任何Proposer产生的编号更高的提案，其值都必须为V</span><br></pre></td></tr></table></figure>
+<p>因此我们满足P2b即可满足P2。接下来我们来讨论如何满足P2b，即如何满足<code>在[M0, V0]被选定时,所有编号Mn &gt; M0的提案，其值也为V0</code>。只需要满足如下约束即可：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">P2c: 如果提案[Mn, Vn]被提出，那么肯定存在一个由半数以上Acceptor组成的集合S，满足如下两个条件之一：</span><br><span class="line">- S中的所有Acceptor都没有批准过编号小于Mn的提案</span><br><span class="line">- S中所有Acceptor批准的最大编号的提案的值为Vn</span><br></pre></td></tr></table></figure>
+<p>下面我们来证明P2c成立的话，P2b也一定成立。我们可以使用第二数学归纳法来证明，即首先假设提案[M0, V0]被选定了，证明过程如下：</p>
+<ol>
+<li>当Mn = M0 + 1时，因为M0已经被选定了，那么肯定不存在一个多数派集合S，其中所有Acceptor都没有批准过编号小于Mn的提案，即P2c中第一个条件肯定不成立了，所以肯定存在多数派Acceptor集合S1，其批准的最大编号的提案只为Vn，因为M0被选定了，所有肯定存在多数派Acceptor集合C，C中每个Acceptor都批准了M0这个提案，因为C与S1必然有交集，所以S1中最大编号的提案一定为M0，所以此时Vn必然等于V0</li>
+<li>根据第二数学归纳法，假设编号M0+1 值Mn-1 范围内的所有提案值都为V0，那么如何证明Mn提案的值也为V0呢？根据P2c，肯定存在一个多数派集合S，S中的Acceptor批准了编号小于Mn的提案，且它批准的最大编号的提案的值肯定为Vn，假设这个最大编号落在[M0+1, Mn-1]区间内，则Vn肯定等于V0，若不在这个区间内，那最大编号肯定为M0，此时Vn也肯定等于V0</li>
+</ol>
+<p>由此可证明，在P2c的约束条件下，P2b是成立的。从上可看到，从P1到P2c的过程其实是一系列条件的加强，由P2c进行反向推导就可保证P2的成立。将条件逐步加强后，就可以推导出提案的生成步骤了，下面我们来看应该如何满足P2c。</p>
+<h2 id="提案流程"><a href="#提案流程" class="headerlink" title="提案流程"></a>提案流程</h2><h3 id="Proposer生成提案"><a href="#Proposer生成提案" class="headerlink" title="Proposer生成提案"></a>Proposer生成提案</h3><p>下面来看在P2c的基础上如何来生成提案。对于Proposer来说，学习已经被批准或即将批准的提案肯定比预测未来被批准的提案更容易，因此，Proposer在生成提案N时，它需要学习这样一个提案M，M被多数派Acceptor批准且M为小于N中提案中编号最大的提案（如果这个提案存在的话）。既然预测未来提案较难，Proposer可以采取一些方法来反正其他提案（值不相同）被批准，Paxos中采用的方法就是Proposer会要求Acceptor不再批准编号小于N的提案，这就引出了如下提案生成算法：</p>
+<p>1.<strong>Prepare阶段</strong><br>Proposer获取一个提案编号N，然后向某个多数派Acceptor集合发出请求，要求集合中的Acceptor做出如下回应：</p>
+<ul>
+<li>不再批准任何编号小于N的提案</li>
+<li>反馈已批准的编号小于N中编号最大的提案（如果有的话）</li>
+</ul>
+<p>2.<strong>Accept阶段</strong><br>Proposer在接收到半数以上Acceptor的回复之后，生成编号为N的提案[N, V]，V就是在Prepare阶段中所有响应中编号最大的提案的值，如果这些Acceptor都没有批准过任何值的话，V的值就由Proposer决定</p>
+<p>在确定提案后，Proposer就会将提案再次发送个半数以上的Acceptor集合，此为Accept请求。需要注意的是，此时的多数派集合跟Prepare阶段的多数派集合并不是一定相等的。</p>
+<h3 id="Acceptor批准提案"><a href="#Acceptor批准提案" class="headerlink" title="Acceptor批准提案"></a>Acceptor批准提案</h3><p>下面来看Acceptor的处理逻辑，Acceptor会接收到两种请求：prepare及accept，它的处理分别如下：</p>
+<ul>
+<li>Prepare请求：可以在任何时间响应</li>
+<li>Accept请求：在不违背承诺的前提下课任意响应，</li>
+</ul>
+<p>即Acceptor批准提案的约束条件如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">P1a: 只有在没有响应过任何编号大于N的prepare请求时，它才能批准这个编号为N的提案</span><br></pre></td></tr></table></figure>
+<h3 id="算法整体流程"><a href="#算法整体流程" class="headerlink" title="算法整体流程"></a>算法整体流程</h3><p>结合前文内容，可以得到如下类似两阶段提交的Paxos算法执行流程：</p>
+<h4 id="阶段一"><a href="#阶段一" class="headerlink" title="阶段一"></a>阶段一</h4><ol>
+<li>Proposer获取一个提案编号N，然后向一个多数派Acceptor集合发送Prepare请求</li>
+<li>如果一个Acceptor接收到一个编号为N的Prepare请求，且N大于它已经响应的所有Prepare请求的编号，它会将自己批准过的编号最大的提案值反馈给Proposer，同时该Acceptor不会再批准任何编号小于N的提案</li>
+</ol>
+<h4 id="阶段二"><a href="#阶段二" class="headerlink" title="阶段二"></a>阶段二</h4><ol>
+<li>如果Proposer收到半数以上Acceptor的Prepare响应，它就会发送提案为[N, V]的Accept请求至一个多数派Acceptor集合，其中V为响应的prepare请求中编号最大的提案值，如果这个值不存在则V会有该Proposer自行生成</li>
+<li>一个Acceptor接收到[N, V]这个提案后，只要它没有响应过编号大于N的Prepare请求，它就可以批准这个提案 </li>
+</ol>
+<p>在实际使运行过程中，一个proposer可能会产生多个提案，但只要遵循上述流程，就一定能得到最终的正确结果，且一个proposer可以在任意时刻丢弃一个提案。</p>
+<h2 id="实际使用"><a href="#实际使用" class="headerlink" title="实际使用"></a>实际使用</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TO DO</span><br></pre></td></tr></table></figure>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/09/crush/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -628,7 +800,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">12</span>
+                  <span class="site-state-item-count">13</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>
@@ -641,7 +813,7 @@
               
               <div class="site-state-item site-state-tags">
                 
-                  <span class="site-state-item-count">9</span>
+                  <span class="site-state-item-count">10</span>
                   <span class="site-state-item-name">tags</span>
                 
               </div>
