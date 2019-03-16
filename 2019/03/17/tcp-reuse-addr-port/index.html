@@ -79,18 +79,18 @@
 
 
 
-<meta name="description" content="本文主要参照MSDN文档，以windows为例，讲述TCP连接的优雅关闭，Linux也是同理  本文主要讨论TCP连接中socket的优雅关闭，在实际使用时，明白关闭一个socket连接(socket connection)及关闭一个socket自身的区别是很重要的。 关闭一个socket连接(shutdown a socket connection)需要连接双方进行信息交互，这个交互即是关闭序">
+<meta name="description" content="本文主要讲述Linux下SO_REUSEADDR及SO_REUSEPORT这两个socket选项的用法及区别，不同平台下的实现可能不同  众所周知，一个TCP/UDP连接是有如下一个五元组来确定的，没有两个连接是具有完全相同的五元组的。 1[协议，源地址，源端口，目的地址，目的端口] 其中，协议部分是在创建socket指定的，源地址及源端口是服务端在bind时指定的，目的地址及目的端口是客户端通">
 <meta name="keywords" content="网络">
 <meta property="og:type" content="article">
-<meta property="og:title" content="TCP连接的优雅关闭">
-<meta property="og:url" content="http://yoursite.com/2019/03/09/close-socket-gracefully/index.html">
+<meta property="og:title" content="TCP中SO_REUSEADDR及SO_REUSEPORT区别">
+<meta property="og:url" content="http://yoursite.com/2019/03/17/tcp-reuse-addr-port/index.html">
 <meta property="og:site_name" content="Leesine&#39;s Blog">
-<meta property="og:description" content="本文主要参照MSDN文档，以windows为例，讲述TCP连接的优雅关闭，Linux也是同理  本文主要讨论TCP连接中socket的优雅关闭，在实际使用时，明白关闭一个socket连接(socket connection)及关闭一个socket自身的区别是很重要的。 关闭一个socket连接(shutdown a socket connection)需要连接双方进行信息交互，这个交互即是关闭序">
+<meta property="og:description" content="本文主要讲述Linux下SO_REUSEADDR及SO_REUSEPORT这两个socket选项的用法及区别，不同平台下的实现可能不同  众所周知，一个TCP/UDP连接是有如下一个五元组来确定的，没有两个连接是具有完全相同的五元组的。 1[协议，源地址，源端口，目的地址，目的端口] 其中，协议部分是在创建socket指定的，源地址及源端口是服务端在bind时指定的，目的地址及目的端口是客户端通">
 <meta property="og:locale" content="default">
-<meta property="og:updated_time" content="2019-03-09T15:23:53.627Z">
+<meta property="og:updated_time" content="2019-03-16T23:51:23.465Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="TCP连接的优雅关闭">
-<meta name="twitter:description" content="本文主要参照MSDN文档，以windows为例，讲述TCP连接的优雅关闭，Linux也是同理  本文主要讨论TCP连接中socket的优雅关闭，在实际使用时，明白关闭一个socket连接(socket connection)及关闭一个socket自身的区别是很重要的。 关闭一个socket连接(shutdown a socket connection)需要连接双方进行信息交互，这个交互即是关闭序">
+<meta name="twitter:title" content="TCP中SO_REUSEADDR及SO_REUSEPORT区别">
+<meta name="twitter:description" content="本文主要讲述Linux下SO_REUSEADDR及SO_REUSEPORT这两个socket选项的用法及区别，不同平台下的实现可能不同  众所周知，一个TCP/UDP连接是有如下一个五元组来确定的，没有两个连接是具有完全相同的五元组的。 1[协议，源地址，源端口，目的地址，目的端口] 其中，协议部分是在创建socket指定的，源地址及源端口是服务端在bind时指定的，目的地址及目的端口是客户端通">
 
 
 
@@ -120,13 +120,13 @@
 
 
 
-  <link rel="canonical" href="http://yoursite.com/2019/03/09/close-socket-gracefully/">
+  <link rel="canonical" href="http://yoursite.com/2019/03/17/tcp-reuse-addr-port/">
 
 
 
 
 
-  <title>TCP连接的优雅关闭 | Leesine's Blog</title>
+  <title>TCP中SO_REUSEADDR及SO_REUSEPORT区别 | Leesine's Blog</title>
   
 
 
@@ -233,7 +233,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/09/close-socket-gracefully/">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/17/tcp-reuse-addr-port/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
       <meta itemprop="name" content="Leeshine">
@@ -250,7 +250,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">TCP连接的优雅关闭</h1>
+          <h1 class="post-title" itemprop="name headline">TCP中SO_REUSEADDR及SO_REUSEPORT区别</h1>
         
 
         <div class="post-meta">
@@ -262,8 +262,8 @@
               
                 <span class="post-meta-item-text">Posted on</span>
               
-              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-03-09T23:21:52+08:00">
-                2019-03-09
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-03-17T07:50:41+08:00">
+                2019-03-17
               </time>
             
 
@@ -301,56 +301,86 @@
 
       
         <blockquote>
-<p>本文主要参照MSDN文档，以windows为例，讲述TCP连接的优雅关闭，Linux也是同理</p>
+<p>本文主要讲述Linux下<code>SO_REUSEADDR</code>及<code>SO_REUSEPORT</code>这两个socket选项的用法及区别，不同平台下的实现可能不同</p>
 </blockquote>
-<p>本文主要讨论TCP连接中socket的优雅关闭，在实际使用时，明白关闭一个socket连接(<code>socket connection</code>)及关闭一个socket自身的区别是很重要的。</p>
-<p>关闭一个socket连接(<code>shutdown a socket connection</code>)需要连接双方进行信息交互，这个交互即是关闭序列<code>shutdown sequence</code>，这中序列主要分为两种：优雅退出及强制退出。在优雅关闭中，任何已经在队列中但尚未发出的数据可以在连接被真正关闭之前被发出，而在强制退出中，任何未被发送的数据都会被丢弃。同时关闭序列也可以用来给相关应用程序发送<code>FD_CLOSE</code>指令，用以表示正在进行关闭连接操作。</p>
-<p>而关闭一个socket本身(<code>close a socket</code>)是将这个socket删除，使得之后没有任何应用可以再使用该socket。</p>
-<p>在Windows编程中，<code>shutdown</code>及<code>WSASendDisconnect</code>这两个函数都可以用来初始化一个关闭序列，而<code>closesocket</code>这个函数用以释放一个socket句柄并回收对应的资源。然而容易造成疑惑的是，再调用<code>closesocket</code>时，如果还没有关闭序列产生，该函数也会隐式生成一个关闭序列。事实上，依赖此特性来使用<code>closesocket</code>来生成一个关闭序列和回收句柄已经成为一个非常常见的用法。为了简化使用，socket编程接口会提供相应机制供使用者指定是产生优雅关闭序列还是强制关闭序列，以及<code>closesocket</code>函数是否应等待（<code>linger</code>，不是立即关闭）优雅关闭的完成。</p>
-<p>通过为<code>SO_LINGER</code>及<code>SO_DONTLINGER</code>这两个选项设置合适的值，<code>closesocket</code>可以具有以下行为：</p>
+<p>众所周知，一个TCP/UDP连接是有如下一个五元组来确定的，没有两个连接是具有完全相同的五元组的。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[协议，源地址，源端口，目的地址，目的端口]</span><br></pre></td></tr></table></figure>
+<p>其中，协议部分是在创建socket指定的，源地址及源端口是服务端在<code>bind</code>时指定的，目的地址及目的端口是客户端通过<code>connect</code>时指定的。因为UDP是无连接的通信协议，一个UDP无需<code>connect</code>就使用，这种无连接的socket</p>
+<p>在第一次发送数据的时候会有系统自动绑定一个五元组，否则的话该socket将无法接收任何数据。对于TCP连接同样是如此，系统会在连接建立之前隐式绑定一个五元组。</p>
+<h2 id="SO-REUSEADDDR"><a href="#SO-REUSEADDDR" class="headerlink" title="SO_REUSEADDDR"></a>SO_REUSEADDDR</h2><p>无法将一个socket绑定值相同的五元组容易带来如下问题：</p>
 <ul>
-<li>生成强制关闭序列，<code>closesocket</code>函数立即返回</li>
-<li>优雅关闭，<code>closesocket</code>函数会等待优雅关闭完成或者直到超时时间，如果超时后优雅关闭还未完成，就会产生一个强制关闭序列，此后函数会返回</li>
-<li>优雅关闭，但是函数立即返回，在后台执行优雅关闭任务，这也是windows及Linux中的默认行为，然而这种模式下，应用程序是无法知道优雅关闭是否完成了</li>
+<li><code>TIME_WAIT</code>状态时间过长，造成期间socket的某个端口无法复用，这个问题在tcp server重启的时候尤其严重</li>
+<li>通过<code>0.0.0.0</code>将socket绑定至本地任意一个地址后，其他本地地址将无法再使用</li>
 </ul>
-<p>其中，<code>linger</code>的使用方式及具体含义可参考<a href="https://leeshine.github.io/2019/03/09/so-linger" target="_blank" rel="noopener">SO_LINGER选项使用方式</a></p>
-<p>为了减少关闭TCP连接过程中可能产生的问题，我们应该尽量避免依赖<code>closesocket</code>来隐式调用<code>shutdown</code>，而是现实调用<code>shutdown</code>或者<code>WSASendDisconnect</code>来关闭连接。这样可以是对端应用程序收到<code>FD_CLOSE</code>指令，标识所有数据都已发送。</p>
-<p>总体来说，如下表所示展示了应该如何优雅关闭一个TCP连接：</p>
+<p>在Linux中，<code>SO_REUSERADDR</code>就是用以解决这个问题的。假设某个主机有两个本地地址分别是<code>192.168.0.1</code>及<code>10.0.0.1</code>，对SocketA及SocketB通过不同方式绑定有如下结果：</p>
 <table>
 <thead>
 <tr>
-<th style="text-align:center">客户端侧</th>
-<th style="text-align:center">服务端侧</th>
+<th style="text-align:center">SO_REUSEADDR</th>
+<th style="text-align:center">SocketA</th>
+<th style="text-align:center">SocketB</th>
+<th style="text-align:center">Result</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align:center">1. 调用<code>shutdown(s, SD_SEND)</code>来关闭一个连接，同时表明自身再无数据需要发送</td>
-<td style="text-align:center"></td>
+<td style="text-align:center">ON/OFF</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">Error(EADDRINUSE)</td>
 </tr>
 <tr>
-<td style="text-align:center"></td>
-<td style="text-align:center">2. 接收到<code>FD_CLOSE</code>事件，表示有优雅关闭正在进行，同时所有数据都已经达到</td>
+<td style="text-align:center">ON/OFF</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">10.0.0.1:21</td>
+<td style="text-align:center">Ok</td>
 </tr>
 <tr>
-<td style="text-align:center"></td>
-<td style="text-align:center">3. 将服务端待发送数据都发送给客户端</td>
+<td style="text-align:center">ON/OFF</td>
+<td style="text-align:center">10.0.0.1:21</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">Ok</td>
 </tr>
 <tr>
-<td style="text-align:center">(时间上同右侧无必然联系)获取到<code>FD_READ</code>事件</td>
-<td style="text-align:center">4. 调用<code>shutdown(s, SD_SEND)</code>，表明服务端以无数据需要发送</td>
+<td style="text-align:center">OFF</td>
+<td style="text-align:center">0.0.0.1:21</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">Error(EADDRINUSE)</td>
 </tr>
 <tr>
-<td style="text-align:center">5. 收到<code>FD_CLOSE</code>事件</td>
-<td style="text-align:center">调用<code>closesocket</code>（时间上同左侧无必然联系）</td>
+<td style="text-align:center">OFF</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">0.0.0.1:21</td>
+<td style="text-align:center">Error(EADDRINUSE)</td>
 </tr>
 <tr>
-<td style="text-align:center">调用<code>closesocket</code></td>
+<td style="text-align:center">ON</td>
+<td style="text-align:center">0.0.0.1:21</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">Ok</td>
+</tr>
+<tr>
+<td style="text-align:center">ON</td>
+<td style="text-align:center">192.168.0.1:21</td>
+<td style="text-align:center">0.0.0.1:21</td>
+<td style="text-align:center">Ok</td>
+</tr>
+<tr>
+<td style="text-align:center">ON/OFF</td>
+<td style="text-align:center">0.0.0.1:21</td>
+<td style="text-align:center">0.0.0.1:21</td>
+<td style="text-align:center">Error(EADDRINUSE)</td>
 </tr>
 </tbody>
 </table>
+<h2 id="SO-REUSEPORT"><a href="#SO-REUSEPORT" class="headerlink" title="SO_REUSEPORT"></a>SO_REUSEPORT</h2><p>如上文所述，<code>SO_REUSEADDR</code>选项并不是用以将socket真正绑定至同一五元组的，Linux在3.9版本之后添加了新选项<code>SO_REUSEPORT</code>，通过该选项，不同线程或者进程就可以绑定至同一端口。其中需要注意的是，所以绑定至该端口的socket都需设置<code>SO_REUSEPORT</code>选项，否则将会绑定失败。同时基于安全性考虑，第一个进程绑定后，后续需要板顶至该端口的进程所属用户要么是root用户，要么是跟第一个进程归属于同一用户。</p>
+<p>网络服务中一种常见的模式是用一个listen线程来接收连接后将分配工作线程来处理新连接，这种模式下listen线程容易存在瓶颈。为了解决这种问题，第二种常见模式是运行多个进程来对循环监听一个端口。在没有<code>SO_REUSEPORT</code>选项之前，是通过<code>fork</code>来实现的，父进程绑定至一个端口后，fork出多个子进程来循环监听这个socket。但是这种模式存在一个问题，当有新连接到来时，那个进程能成功获取到这个连接呢？在Linux 2.6.18之前，所有监听的进程都会被唤醒，但只有一个进程能成功获取到这个连接，这既是<code>accept惊群</code>问题，在Linux2.6.18之后的版本已经修复了这个问题。但是如果使用epoll去监听<code>accept socket</code>上的可读事件，仍会存在惊群问题。</p>
+<p>有了<code>SO_REUSEPORT</code>选项，我们就可以不通过fork的方式来让多个进程监听统一端口，这样每个进程中的socket fd是不一样的，自然也就不会存在惊群问题。</p>
 <h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
-<li><a href="https://docs.microsoft.com/en-us/windows/desktop/winsock/graceful-shutdown-linger-options-and-socket-closure-2" target="_blank" rel="noopener">Graceful Shutdown, Linger Options, and Socket Closure</a></li>
+<li><a href="http://blog.qiusuo.im/blog/2014/09/14/linux-so-reuseport/" target="_blank" rel="noopener">Linux中SO_REUSEADDR和SO_REUSEPORT区别</a></li>
+</ul>
+<ul>
+<li><a href="http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t/14388707#14388707" target="_blank" rel="noopener">Difference between SO_REUSEADDR and SO_REUSEPORT</a></li>
 </ul>
 
       
@@ -382,8 +412,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2019/03/09/so-linger/" rel="next" title="SO_LINGER选项使用方式">
-                <i class="fa fa-chevron-left"></i> SO_LINGER选项使用方式
+              <a href="/2019/03/17/stack-of-fuc-call/" rel="next" title="C++函数调用栈过程">
+                <i class="fa fa-chevron-left"></i> C++函数调用栈过程
               </a>
             
           </div>
@@ -391,10 +421,6 @@
           <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
-            
-              <a href="/2019/03/17/stack-of-fuc-call/" rel="prev" title="C++函数调用栈过程">
-                C++函数调用栈过程 <i class="fa fa-chevron-right"></i>
-              </a>
             
           </div>
         </div>
@@ -533,7 +559,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">1.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#SO-REUSEADDDR"><span class="nav-number">1.</span> <span class="nav-text">SO_REUSEADDDR</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SO-REUSEPORT"><span class="nav-number">2.</span> <span class="nav-text">SO_REUSEPORT</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
