@@ -841,10 +841,11 @@
 <li>CRUSH算法本身是有缺陷的，前文描述的straw2每次选择item都是计算其独立概率的，但是在实际过程中为了考虑副本的分布策略，却变成了针对item计算条件概率，所以CRUSH也无法真正处理好多副本模式下的副本均匀分布问题</li>
 <li>设备的权重一般是根据其容量计算得来的，但是容量更大的硬盘不代表性能更高。所以针对异构集群（特质存在容量不一的OSD设备），CRUSH无法较好处理这种情况</li>
 </ul>
-<p>因此在实际使用过程中，是允许对CRUSH的计算结果进行人工调整的。在CEPH中，每个设备除了有一个权重之外，还有一个外的reweight，CRUSH在正常选中一个OSD后，还会基于该reweight对OSD进行测试，如果测试失败，则拒绝选择该OSD，reweight调的越高，则测试通过率就越高。</p>
+<p>因此在实际使用过程中，是允许对CRUSH的计算结果进行人工调整的。在CEPH中，每个设备除了有一个权重之外，还有一个外的reweight，CRUSH在正常选中一个OSD后，还会基于该reweight对OSD进行测试，如果测试失败，则拒绝选择该OSD，reweight调的越高，则测试通过率就越高。weight与reweight的最大区别就是weight是表示osd在crushmap中的权重，它的值一般是固定的，目前一个osd的磁盘主要是根据它的容量来计算的。而reweight是可以在使用过程中调整的，osd的reweight调整不会影响osd之上的bucket的权重，所以对以bucket的选择不会有任何影响，而只是用以选择完osd之后进行一个测试。一般来说，reweight主要是一种临时调整方案，如集群中某些磁盘较满，我们可以在一边扩容的同时，降低这些磁盘的reweight以保持集群的正常使用。</p>
 <h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
 <li>Ceph设计原理与实现 [谢型果 等]</li>
 <li>Ceph源码分析 [常涛 等]</li>
+<li><a href="http://cephnotes.ksperis.com/blog/2014/12/23/difference-between-ceph-osd-reweight-and-ceph-osd-crush-reweight" target="_blank" rel="noopener">Difference Between ‘Ceph Osd Reweight’ and ‘Ceph Osd Crush Reweight’</a></li>
 </ul>
 
           
