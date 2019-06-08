@@ -233,6 +233,182 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/12/18/linux-performance-analysis-60s/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2018/12/18/linux-performance-analysis-60s/" itemprop="url">Linux性能分析60秒</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2018-12-18T21:05:05+08:00">
+                2018-12-18
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <blockquote>
+<p>在本文中，我们来看在调查某个主机的性能问题时，前60S内应该首先查看哪些信息，从而快速了解整个主机的运行状况。</p>
+</blockquote>
+<p>在前60S内，通过运行以下10个命令，我们可以对系统的资源使用情况、进程运行状况有个整体了解</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">uptime</span><br><span class="line">dmesg</span><br><span class="line">vmstat 1</span><br><span class="line">mpstat -P ALL 1</span><br><span class="line">pidstat 1</span><br><span class="line">iostat -xz 1</span><br><span class="line">free -m</span><br><span class="line">sar -n DEV 1</span><br><span class="line">sar -n TCP,ETCP 1</span><br><span class="line">top</span><br></pre></td></tr></table></figure>
+<h2 id="uptime"><a href="#uptime" class="headerlink" title="uptime"></a>uptime</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ uptime </span><br><span class="line">21:43:21 up 78 days,  3:07,  2 users,  load average: 3.71, 3.08, 3.13</span><br></pre></td></tr></table></figure>
+<p>uptime可以使我们快速了解系统的整体负载信息，以上输出中显示的信息依次为：系统当前时间、已运行时间、 登陆用户数、平均负载，其中平均负载这里的三个数字分别表示过去1分钟、5分钟、15分钟内CPU的负载情况。对于CPU的单个核心来说，负载为1.0则说明CPU负载已经较高，没有剩余的资源了，如果长期保持在这个负载的话，则容易造成请求的积压，对于多核CPU，则该值是表示所有核的累加值。在实际定位过程中，主要是以15分钟内CPU的负载数为准，如果15分钟内CPU的负载仍然较高，那就需要注意了</p>
+<h2 id="dmesg"><a href="#dmesg" class="headerlink" title="dmesg"></a>dmesg</h2><p>dmesg是用来显示内核环缓冲区的内容，内核将各种消息都存放在这里，内核环缓冲区的消息对于诊断系统问题很有用。例如我们可以通过dmesg查看是否有进程因为OOM被杀死、是否有TCP请求被丢弃等</p>
+<h2 id="vmstat"><a href="#vmstat" class="headerlink" title="vmstat"></a>vmstat</h2><p>vmstat可对操作系统的虚拟内存、进程、CPU活动进行监控，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">$ vmstat 1</span><br><span class="line">procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----</span><br><span class="line"> r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st</span><br><span class="line">11  1 2039544 15472068   5000 2144664    0    0   757   262    0    0  5  2 90  4  0</span><br><span class="line">13  1 2039328 15674144   5020 2139396 1248    0 10448    44 89482 181158 13 38 44  5  0</span><br><span class="line"> 7  1 2039004 16007556   5020 2122564 1760    0  7672    12 104794 213528 14 40 41  4  0</span><br><span class="line"> 3  2 2038660 16180976   5040 2110112 1884    0  3468    20 100660 200327 19 39 37  5  0</span><br><span class="line"> 6  2 2038464 16486160   5040 2094924  928    0  7688    12 90962 182643 15 38 43  5  0</span><br><span class="line"> 2  2 2038200 16674132   5040 2090216 1060    0 10856    12 56284 108656 14 29 51  5  0</span><br><span class="line"> 2  1 2037976 16817976   5052 2091832 1152    0 12184 10828 47027 85099 11 24 59  6  0</span><br></pre></td></tr></table></figure>
+<p>以上输出中，主要关注如下列：</p>
+<ul>
+<li>r: 运行队列中的进程数量，即占用CPU的进程数。如果CPU单核上超过3个进程，那么CPU的负载就较高了</li>
+<li>swap: 使用的虚拟内存大小，如果此值较高，说明内存可能不足</li>
+<li>free: 可用内存大小</li>
+<li>si,so:  每秒从交换区写入内存的大小，每秒从内存写入交换区的大小</li>
+<li>us,sy,id,wa,st: 用户空间时间、系统空间时间、空闲时间、等待IO时间、被强制等待CPU的时间。如果us+sy所占的比例较高的话，则说明CPU负载较高，如果wa的比例较高，则说明磁盘可能存在瓶颈</li>
+</ul>
+<h2 id="mpstat"><a href="#mpstat" class="headerlink" title="mpstat"></a>mpstat</h2><p>mpstat是CPU的实时监控工具，可以检测CPU中每个核的运行状况，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">$ mpstat -P ALL 1</span><br><span class="line">Linux 3.10.107-1-tlinux2-0046 (100.98.49.234) 	12/18/2018 	_x86_64_	(12 CPU)</span><br><span class="line"></span><br><span class="line">07:52:07 PM  CPU    %usr   %nice    %sys %iowait    %irq   %soft  %steal  %guest  %gnice   %idle</span><br><span class="line">07:52:08 PM  all    3.17    0.00    0.92    9.19    0.00    0.17    0.00    0.00    0.00   86.55</span><br><span class="line">07:52:08 PM    0    3.03    0.00    2.02   49.49    0.00    0.00    0.00    0.00    0.00   45.45</span><br><span class="line">07:52:08 PM    1    6.00    0.00    2.00   45.00    0.00    1.00    0.00    0.00    0.00   46.00</span><br><span class="line">07:52:08 PM    2    2.00    0.00    1.00   13.00    0.00    0.00    0.00    0.00    0.00   84.00</span><br><span class="line">07:52:08 PM    3    3.00    0.00    0.00    2.00    0.00    0.00    0.00    0.00    0.00   95.00</span><br><span class="line">07:52:08 PM    4    1.98    0.00    0.99    0.99    0.00    0.00    0.00    0.00    0.00   96.04</span><br><span class="line">07:52:08 PM    5   18.00    0.00    3.00    0.00    0.00    0.00    0.00    0.00    0.00   79.00</span><br><span class="line">07:52:08 PM    6    3.06    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00   96.94</span><br><span class="line">07:52:08 PM    7    1.01    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00   98.99</span><br><span class="line">07:52:08 PM    8    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00  100.00</span><br><span class="line">07:52:08 PM    9    1.01    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00   98.99</span><br><span class="line">07:52:08 PM   10    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00  100.00</span><br><span class="line">07:52:08 PM   11    1.00    0.00    1.00    0.00    0.00    0.00    0.00    0.00    0.00   98.00</span><br></pre></td></tr></table></figure>
+<p>通过vmstat可以获取CPU的综合使用情况，而通过mpstat可以获取每个CPU核心的使用情况，某些糟糕的程序可能会一直只使用一个CPU核心，而不是运行在所有处理器上，从而导致某个CPU核心负载很高，其他CPU资源却是空闲的。通过mpstat便可诊断这类问题</p>
+<h2 id="pidstat"><a href="#pidstat" class="headerlink" title="pidstat"></a>pidstat</h2><p>pidstat同top命令类似，用以监控全部或者指定进程的CPU、内存等资源的占用情况，它会将这些信息滚动打印，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line">$ pidstat 1</span><br><span class="line">Linux 3.10.107-1-tlinux2-0046 (100.98.49.234) 	12/18/2018 	_x86_64_	(12 CPU)</span><br><span class="line"></span><br><span class="line">07:59:50 PM   UID       PID    %usr %system  %guest    %CPU   CPU  Command</span><br><span class="line">07:59:51 PM     0   1008095    0.00    0.99    0.00    0.99     9  kworker/9:2</span><br><span class="line">07:59:51 PM     0   1359487    0.00    0.99    0.00    0.99    10  ceph-osd</span><br><span class="line">07:59:51 PM     0   1360110    2.97    1.98    0.00    4.95     4  ceph-osd</span><br><span class="line">07:59:51 PM     0   1361355    1.98    1.98    0.00    3.96    10  ceph-osd</span><br><span class="line">07:59:51 PM     0   1362096    0.00    0.99    0.00    0.99     2  ceph-osd</span><br><span class="line">07:59:51 PM     0   1362981    0.99    0.00    0.00    0.99     5  ceph-osd</span><br><span class="line">07:59:51 PM     0   1365565    1.98    1.98    0.00    3.96     4  ceph-osd</span><br><span class="line">07:59:51 PM     0   1368403    2.97    1.98    0.00    4.95     5  ceph-osd</span><br><span class="line">07:59:51 PM     0   2070599    1.98    2.97    0.00    4.95     5  sap1002</span><br><span class="line">07:59:51 PM     0   2070612    0.00    0.99    0.00    0.99     5  sap1008</span><br><span class="line">07:59:51 PM     0   2430524    0.00    0.99    0.00    0.99     1  pidstat</span><br><span class="line"></span><br><span class="line">07:59:51 PM   UID       PID    %usr %system  %guest    %CPU   CPU  Command</span><br><span class="line">07:59:52 PM     0        21    0.00    1.00    0.00    1.00     3  rcu_sched</span><br><span class="line">07:59:52 PM     0       195    0.00    1.00    0.00    1.00     0  kworker/0:1H</span><br><span class="line">07:59:52 PM     0     14132    1.00    1.00    0.00    2.00     8  safe_TsysAgent.</span><br><span class="line">07:59:52 PM     0   1358777    1.00    0.00    0.00    1.00     4  ceph-osd</span><br><span class="line">07:59:52 PM     0   1359487    1.00    0.00    0.00    1.00    10  ceph-osd</span><br><span class="line">07:59:52 PM     0   1360110    5.00    0.00    0.00    5.00     4  ceph-osd</span><br><span class="line">07:59:52 PM     0   1361355    2.00    2.00    0.00    4.00    10  ceph-osd</span><br><span class="line">07:59:52 PM     0   1362981    0.00    1.00    0.00    1.00     5  ceph-osd</span><br><span class="line">07:59:52 PM     0   1363880    1.00    0.00    0.00    1.00     5  ceph-osd</span><br><span class="line">07:59:52 PM     0   1364665    1.00    1.00    0.00    2.00    10  ceph-osd</span><br><span class="line">07:59:52 PM     0   1365565    3.00    0.00    0.00    3.00     4  ceph-osd</span><br><span class="line">07:59:52 PM     0   1366476    1.00    0.00    0.00    1.00     4  ceph-osd</span><br><span class="line">07:59:52 PM     0   1367460    1.00    1.00    0.00    2.00     4  ceph-osd</span><br><span class="line">07:59:52 PM     0   1368403    3.00    2.00    0.00    5.00     5  ceph-osd</span><br><span class="line">07:59:52 PM     0   1646795    0.00    1.00    0.00    1.00    10  kworker/10:1</span><br><span class="line">07:59:52 PM     0   2417476    1.00    0.00    0.00    1.00     7  fdbcli</span><br><span class="line">07:59:52 PM     0   2430524    0.00    1.00    0.00    1.00     1  pidstat</span><br></pre></td></tr></table></figure>
+<h2 id="iostat"><a href="#iostat" class="headerlink" title="iostat"></a>iostat</h2><p>iostat用以监控系统中的IO状态，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">$ iostat -xz 1</span><br><span class="line">Linux 3.10.107-1-tlinux2-0046 (100.98.49.234) 	12/18/2018 	_x86_64_	(12 CPU)</span><br><span class="line"></span><br><span class="line">avg-cpu:  %user   %nice %system %iowait  %steal   %idle</span><br><span class="line">           4.84    0.00    1.81    3.57    0.00   89.78</span><br><span class="line"></span><br><span class="line">Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util</span><br><span class="line">sda               0.06     3.95    0.31    9.31     6.25   190.85    40.97     0.31   31.39    0.36   32.44   3.41   3.28</span><br><span class="line">sdh               0.00     0.23    6.22    1.94   700.92   228.59   227.96     0.11   13.19   11.24   19.44   9.74   7.94</span><br><span class="line">sdm               0.00     0.28    7.77    2.40   875.65   284.36   228.15     0.14   13.44   11.11   20.99   9.64   9.80</span><br><span class="line">sdi               0.00     0.28    6.63    2.20   750.45   242.41   224.79     0.12   13.20   11.34   18.81   9.75   8.61</span><br><span class="line">sdk               0.00     0.30    7.66    2.27   871.22   276.49   231.28     0.13   13.44   11.06   21.49   9.64   9.57</span><br><span class="line">sdd               0.00     0.29    5.83    2.65   646.21   216.63   203.62     0.10   12.33   11.12   15.00   9.14   7.75</span><br><span class="line">sdl               0.00     0.24    5.96    1.92   676.90   220.14   227.71     0.10   12.91   10.96   18.95   9.54   7.52</span><br><span class="line">sdj               0.00     0.27    7.15    2.17   805.51   261.04   228.82     0.12   13.14   11.06   20.01   9.63   8.98</span><br><span class="line">sde               0.00     0.27    7.17    2.12   799.00   264.21   228.99     0.12   13.31   11.10   20.78   9.67   8.98</span><br><span class="line">sdc               0.00     0.29    6.81    2.25   772.16   249.00   225.44     0.12   13.38   11.16   20.10   9.63   8.73</span><br><span class="line">sdb               0.00     0.27    6.98    2.08   788.66   256.29   230.90     0.12   13.52   11.27   21.10   9.78   8.86</span><br><span class="line">sdf               0.00     0.21    5.35    1.76   607.02   197.17   226.41     0.09   12.69   11.06   17.65   9.61   6.82</span><br><span class="line">sdg               0.00     0.24    6.69    2.03   768.27   243.12   232.07     0.12   13.36   11.24   20.37   9.75   8.50</span><br></pre></td></tr></table></figure>
+<p>各列的含义如下：</p>
+<ul>
+<li>r/s, w/s,rKB/s,wKB/s: 一秒内读次数、写次数、读数据大小、写数据大小</li>
+<li>await: IO的平均响应时间，包括IO’的等待时间、服务时间，如果这个时间较长，则说明磁盘可能存在瓶颈。一般来说，这个时间应该小于5ms</li>
+<li>svctm: IO的平均服务时间，如果该值比较接近await，则说明IO几乎没有等待时间</li>
+<li>avgqu-sz:  IO的平均队列长度，如果该值超过1，则说明排队请求较多，磁盘可能存在瓶颈</li>
+<li>%util: 磁盘用以IO操作的时间百分比，如果该值接近100%，则说明产生的IO请求太多，磁盘负载已经很高</li>
+</ul>
+<h2 id="free"><a href="#free" class="headerlink" title="free"></a>free</h2><p>free可以用以显示系统的内存使用状况，如下所示:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">$ free -m</span><br><span class="line">             total       used       free     shared    buffers     cached</span><br><span class="line">Mem:        245998      24545     221453         83         59        541</span><br><span class="line">-/+ buffers/cache:      23944     222053</span><br><span class="line">Swap:            0          0          0</span><br></pre></td></tr></table></figure>
+<p>其中最后一行表示swap分区的使用信息，第二行是操作系统层面的内存使用情况，其中buffers是buffer缓存内存数（写缓存），cached是page cache使用的内存缓存数（读缓存），第三行是减去buffer、cache的已使用量和加上buffer、cache的空闲量，这是用户层面的统计信息，因为对于用户程序来说，buffers、cached占用的内存是可以立即重新分配，供用户程序使用的。</p>
+<h2 id="sar"><a href="#sar" class="headerlink" title="sar"></a>sar</h2><p>sar是目前Linux上最为全部的系统性能分析工具之一，我们可以通过sar来查看网络吞吐状况，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">$ sar -n DEV 1</span><br><span class="line">Linux 3.10.107-1-tlinux2-0046 (100.98.49.234) 	12/18/2018 	_x86_64_	(12 CPU)</span><br><span class="line"></span><br><span class="line">08:37:57 PM     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s</span><br><span class="line">08:37:58 PM     bond1   2215.00   2259.00   1621.38   1712.75      0.00      0.00      2.00</span><br><span class="line">08:37:58 PM      eth0   1305.00   1068.00    992.93    724.90      0.00      0.00      1.00</span><br><span class="line">08:37:58 PM      eth1    910.00   1191.00    628.45    987.85      0.00      0.00      1.00</span><br><span class="line">08:37:58 PM        lo      3.00      3.00      0.99      0.99      0.00      0.00      0.00</span><br><span class="line"></span><br><span class="line">08:37:58 PM     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s</span><br><span class="line">08:37:59 PM     bond1   3327.00   3264.00   2411.48   2390.17      0.00      0.00      2.00</span><br><span class="line">08:37:59 PM      eth0   1889.00   1508.00   1377.83   1035.24      0.00      0.00      1.00</span><br><span class="line">08:37:59 PM      eth1   1438.00   1756.00   1033.66   1354.92      0.00      0.00      1.00</span><br><span class="line">08:37:59 PM        lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00</span><br><span class="line"></span><br><span class="line">08:37:59 PM     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s</span><br><span class="line">08:38:00 PM     bond1   3025.00   3221.00   2189.47   2477.83      0.00      0.00      3.00</span><br><span class="line">08:38:00 PM      eth0   1914.00   1621.00   1412.42   1133.86      0.00      0.00      1.00</span><br><span class="line">08:38:00 PM      eth1   1111.00   1600.00    777.05   1343.97      0.00      0.00      2.00</span><br><span class="line">08:38:00 PM        lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00</span><br></pre></td></tr></table></figure>
+<p>每列的含义如下：</p>
+<ul>
+<li>rxpck/s, txpck/s:  每秒接收、发送的包数目</li>
+<li>rxkB/s, txkB/s:  每秒接收、发送的数据大小</li>
+</ul>
+<p>我们也可以通过sar来查看主机上TCP连接的状况，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">$ sar -n TCP,ETCP 1</span><br><span class="line">Linux 3.13.0-49-generic (titanclusters-xxxxx)  07/14/2015    _x86_64_    (32 CPU)</span><br><span class="line"></span><br><span class="line">12:17:19 AM  active/s passive/s    iseg/s    oseg/s</span><br><span class="line">12:17:20 AM      1.00      0.00  10233.00  18846.00</span><br><span class="line"></span><br><span class="line">12:17:19 AM  atmptf/s  estres/s retrans/s isegerr/s   orsts/s</span><br><span class="line">12:17:20 AM      0.00      0.00      0.00      0.00      0.00</span><br><span class="line"></span><br><span class="line">12:17:20 AM  active/s passive/s    iseg/s    oseg/s</span><br><span class="line">12:17:21 AM      1.00      0.00   8359.00   6039.00</span><br><span class="line"></span><br><span class="line">12:17:20 AM  atmptf/s  estres/s retrans/s isegerr/s   orsts/s</span><br><span class="line">12:17:21 AM      0.00      0.00      0.00      0.00      0.00</span><br></pre></td></tr></table></figure>
+<p>每列的含义如下：</p>
+<ul>
+<li>active/s:  本地每秒初始化的TCP连接数（通过connect（）连接远程服务器）</li>
+<li>passive/s:  每秒远程连接的TCP数（通过accept（）接收远程连接）</li>
+<li>retrans/s: 每秒TCP包重发次数，它通常是网络服务出现问题的标志（如出现丢包、网络负载太高等）</li>
+</ul>
+<h2 id="top"><a href="#top" class="headerlink" title="top"></a>top</h2><p>top命令可以简单快捷地统计系统中的资源使用情况、进程运行状况等，如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">$ top</span><br><span class="line">top - 20:47:16 up 79 days,  2:11, 10 users,  load average: 1.46, 2.02, 2.47</span><br><span class="line">Tasks: 325 total,   1 running, 324 sleeping,   0 stopped,   0 zombie</span><br><span class="line">%Cpu(s):  1.0 us,  0.5 sy,  0.0 ni, 98.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st</span><br><span class="line">KiB Mem : 32281840 total,   393664 free, 19142128 used, 12746048 buff/cache</span><br><span class="line">KiB Swap:  2088956 total,   651716 free,  1437240 used.  8835108 avail Mem </span><br><span class="line"></span><br><span class="line">    PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND                                                                                                               </span><br><span class="line">1362981 root      20   0 1764960 693536   3476 S   6.7  2.1   1174:25 ceph-osd                                                                                                              </span><br><span class="line">2070599 root      20   0   20920  19808    680 S   6.7  0.1 814:04.35 sap1002                                                                                                               </span><br><span class="line">      1 root      20   0  193084   3432   1264 S   0.0  0.0  12:52.37 systemd                                                                                                               </span><br><span class="line">      2 root      20   0       0      0      0 S   0.0  0.0   0:03.77 kthreadd                                                                                                              </span><br><span class="line">      3 root      20   0       0      0      0 S   0.0  0.0   8:08.06 ksoftirqd/0                                                                                                           </span><br><span class="line">      5 root       0 -20       0      0      0 S   0.0  0.0   0:00.00 kworker/0:0H                                                                                                          </span><br><span class="line">      7 root      rt   0       0      0      0 S   0.0  0.0   0:53.07 migration/0                                                                                                           </span><br><span class="line">      8 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcu_bh                                                                                                                </span><br><span class="line">      9 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/0                                                                                                               </span><br><span class="line">     10 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/1                                                                                                               </span><br><span class="line">     11 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/2                                                                                                               </span><br><span class="line">     12 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/3                                                                                                               </span><br><span class="line">     13 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/4                                                                                                               </span><br><span class="line">     14 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/5                                                                                                               </span><br><span class="line">     15 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/6                                                                                                               </span><br><span class="line">     16 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/7                                                                                                       </span><br><span class="line">     17 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/8                                                                                                               </span><br><span class="line">     18 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/9                                                                                                               </span><br><span class="line">     19 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/10                                                                                                              </span><br><span class="line">     20 root      20   0       0      0      0 S   0.0  0.0   0:00.00 rcuob/11                                                                                                              </span><br><span class="line">     21 root      20   0       0      0      0 S   0.0  0.0  94:17.16 rcu_sched</span><br></pre></td></tr></table></figure>
+<p>通过此命令可一目了然得看出系统资源的负载是否较高，哪些进程占用了较多资源等，以便进一步分析</p>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="https://medium.com/netflix-techblog/linux-performance-analysis-in-60-000-milliseconds-accc10403c55" target="_blank" rel="noopener">Linux Performance Analysis in 60,000 Milliseconds</a></li>
+</ul>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/09/rgw-multi-site/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -1106,7 +1282,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">14</span>
+                  <span class="site-state-item-count">15</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>
@@ -1119,7 +1295,7 @@
               
               <div class="site-state-item site-state-tags">
                 
-                  <span class="site-state-item-count">10</span>
+                  <span class="site-state-item-count">11</span>
                   <span class="site-state-item-name">tags</span>
                 
               </div>

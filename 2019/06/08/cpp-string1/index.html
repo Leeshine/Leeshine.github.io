@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="C++,">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="从实际使用上来说，std::string跟应该叫做std::string_buffer，因为它的特性更像std::vector而不是std::array，在很多情况下都容易引起数据拷贝。在实际项目中，拷贝std::vector并不是一个好的行为，他们更想要的是copy-on-write string、不可变string、基于引用计数的string等。在实际使用的过程中，std::string的最大">
+<meta name="keywords" content="C++">
+<meta property="og:type" content="article">
+<meta property="og:title" content="漫谈C++ string（1）：std::string实现">
+<meta property="og:url" content="http://yoursite.com/2019/06/08/cpp-string1/index.html">
+<meta property="og:site_name" content="Leesine&#39;s Blog">
+<meta property="og:description" content="从实际使用上来说，std::string跟应该叫做std::string_buffer，因为它的特性更像std::vector而不是std::array，在很多情况下都容易引起数据拷贝。在实际项目中，拷贝std::vector并不是一个好的行为，他们更想要的是copy-on-write string、不可变string、基于引用计数的string等。在实际使用的过程中，std::string的最大">
+<meta property="og:locale" content="default">
+<meta property="og:image" content="f:/pic/cpp/string_mem.png">
+<meta property="og:updated_time" content="2019-06-08T07:02:09.071Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="漫谈C++ string（1）：std::string实现">
+<meta name="twitter:description" content="从实际使用上来说，std::string跟应该叫做std::string_buffer，因为它的特性更像std::vector而不是std::array，在很多情况下都容易引起数据拷贝。在实际项目中，拷贝std::vector并不是一个好的行为，他们更想要的是copy-on-write string、不可变string、基于引用计数的string等。在实际使用的过程中，std::string的最大">
+<meta name="twitter:image" content="f:/pic/cpp/string_mem.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/06/08/cpp-string1/">
+
+
+
+
+
+  <title>漫谈C++ string（1）：std::string实现 | Leesine's Blog</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope="" itemtype="http://schema.org/WebPage" lang="default">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Leesine's Blog</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Stay Hungry, Stay Foolish</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/06/08/cpp-string1/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">漫谈C++ string（1）：std::string实现</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-06-08T15:00:39+08:00">
+                2019-06-08
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>从实际使用上来说，std::string跟应该叫做std::string_buffer，因为它的特性更像std::vector而不是std::array，在很多情况下都容易引起数据拷贝。在实际项目中，拷贝std::vector<char>并不是一个好的行为，他们更想要的是copy-on-write string、不可变string、基于引用计数的string等。在实际使用的过程中，std::string的最大问题就是它不适用于作为参数传递，因为它非常容易导致不必要的数据拷贝。此外，由于各个标注库实现的方式不同，会给跨平台一直带来风险，所以现在不少大型项目都会自己实现相关的string类。在实际使用过程中一般有以下替代品：</char></p>
+<ul>
+<li>boost::string_ref（chrome:StringPiece）</li>
+<li>std::string_view(c++17后才可用)</li>
+<li>不直接传递一个string，而是传递它的迭代器</li>
+</ul>
+<p>本文主要来分析GNU STL中std::string的实现，string_ref的实现可参考（），folly::FBString的实现可参考（）。</p>
+<h2 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h2><p>以<code>gcc-stl 4.4.0</code>为例std::string的实现方式，gnu-stl中string的定义如下：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> _CharT, <span class="keyword">typename</span> _Traits = char_traits&lt;_CharT&gt;,</span><br><span class="line">         <span class="keyword">typename</span> _Alloc = allocator&lt;_CharT&gt; &gt;</span><br><span class="line">  class basic_string;</span><br><span class="line"><span class="keyword">typedef</span> basic_string&lt;<span class="keyword">char</span>&gt;    <span class="built_in">string</span>;</span><br></pre></td></tr></table></figure></p>
+<p>可以看到，std::string是basic_string关于char的实现，下面来看basic_string的实现，如下为关于basic_string的部分说明：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">*  A <span class="built_in">string</span> looks like <span class="keyword">this</span>:</span><br><span class="line">*</span><br><span class="line">*  @code</span><br><span class="line">*                                        [_Rep]</span><br><span class="line">*                                        _M_length <span class="comment">//长度</span></span><br><span class="line">*   [basic_string&lt;char_type&gt;]            _M_capacity <span class="comment">//容量</span></span><br><span class="line">*   _M_dataplus                          _M_refcount <span class="comment">//引用计数，使用了cow</span></span><br><span class="line">*   _M_p ----------------&gt;               unnamed <span class="built_in">array</span> of char_type <span class="comment">//指向实际的数据</span></span><br><span class="line">*  @endcode</span><br></pre></td></tr></table></figure>
+<h2 id="构造"><a href="#构造" class="headerlink" title="构造"></a>构造</h2><p>首先来看basic_string的构造函数，以最常见的std::string(“xxx”)这种构造方式为例来看它对应的构造函数：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> _CharT, <span class="keyword">typename</span> _Traits, <span class="keyword">typename</span> _Alloc&gt;</span><br><span class="line">   basic_string&lt;_CharT, _Traits, _Alloc&gt;::</span><br><span class="line">   basic_string(<span class="keyword">const</span> _CharT* __s, size_type __n, <span class="keyword">const</span> _Alloc&amp; __a)</span><br><span class="line">   : _M_dataplus(_S_construct(__s, __s + __n, __a), __a)</span><br><span class="line">   &#123; &#125;</span><br></pre></td></tr></table></figure>
+<p>它调用<code>_S_construct</code>这个函数对<code>_M_dataplus</code>这个成员变量来进行初始化，<code>_M_dataplus</code>的定义为：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">     <span class="comment">// Use empty-base optimization: http://www.cantrip.org/emptyopt.html</span></span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">Alloc_hider</span> :</span> _Alloc</span><br><span class="line">     &#123;</span><br><span class="line">_Alloc_hider(_CharT* __dat, <span class="keyword">const</span> _Alloc&amp; __a)</span><br><span class="line">: _Alloc(__a), _M_p(__dat) &#123; &#125;</span><br><span class="line"></span><br><span class="line">_CharT* _M_p; <span class="comment">// The actual data.</span></span><br><span class="line">     &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span>:</span><br><span class="line">     <span class="comment">// Data Members (private):</span></span><br><span class="line">     <span class="keyword">mutable</span> _Alloc_hider	_M_dataplus;</span><br></pre></td></tr></table></figure></p>
+<p>由此可见，<code>_M_dataplus</code>中包含指向实际数据的指针，前文也说到，basic_string中应该还包含有大小、容量等数据成员的，这部分数据成员是存在<code>_Rep</code>中的，basic_string只存储指向它的指针，从而将减少内存占用和避免额外的内存拷贝，它的定义如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">Rep_base</span></span></span><br><span class="line"><span class="class">     &#123;</span></span><br><span class="line">size_type		_M_length;</span><br><span class="line">size_type		_M_capacity;</span><br><span class="line">_Atomic_word		_M_refcount;</span><br><span class="line">     &#125;;</span><br><span class="line"></span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">Rep</span> :</span> _Rep_base</span><br><span class="line">     &#123;</span><br><span class="line">       _CharT*</span><br><span class="line">         _M_refdata() <span class="keyword">throw</span>()</span><br><span class="line">         &#123; <span class="keyword">return</span> <span class="keyword">reinterpret_cast</span>&lt;_CharT*&gt;(<span class="keyword">this</span> + <span class="number">1</span>); &#125;<span class="comment">//获取指向的实际数据</span></span><br><span class="line">     &#125;</span><br></pre></td></tr></table></figure>
+<p><code>_S_construct</code>根据输入参数初始化<code>_M_dataplus</code>,定义如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line">  <span class="keyword">template</span>&lt;<span class="keyword">typename</span> _CharT, <span class="keyword">typename</span> _Traits, <span class="keyword">typename</span> _Alloc&gt;</span><br><span class="line">    <span class="keyword">template</span>&lt;<span class="keyword">typename</span> _InIterator&gt;</span><br><span class="line">      _CharT*</span><br><span class="line">      basic_string&lt;_CharT, _Traits, _Alloc&gt;::</span><br><span class="line">      _S_construct(_InIterator __beg, _InIterator __end, <span class="keyword">const</span> _Alloc&amp; __a,</span><br><span class="line">		   input_iterator_tag)</span><br><span class="line">      &#123;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> _GLIBCXX_FULLY_DYNAMIC_STRING <span class="comment">//是否开启动态字符串，默认是开启的，即使用引用计数</span></span></span><br><span class="line">	<span class="keyword">if</span> (__beg == __end &amp;&amp; __a == _Alloc())</span><br><span class="line">	  <span class="keyword">return</span> _S_empty_rep()._M_refdata();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	<span class="comment">// Avoid reallocation for common case.</span></span><br><span class="line">     <span class="comment">//当字符串较短时，直接将数据存在栈中，避免去申请动态内存空间</span></span><br><span class="line">	_CharT __buf[<span class="number">128</span>];</span><br><span class="line">	size_type __len = <span class="number">0</span>;</span><br><span class="line">	<span class="keyword">while</span> (__beg != __end &amp;&amp; __len &lt; <span class="keyword">sizeof</span>(__buf) / <span class="keyword">sizeof</span>(_CharT))</span><br><span class="line">	  &#123;</span><br><span class="line">	    __buf[__len++] = *__beg;</span><br><span class="line">	    ++__beg;</span><br><span class="line">	  &#125;</span><br><span class="line">     <span class="comment">//根据__len分配空间，初始化__r</span></span><br><span class="line">	_Rep* __r = _Rep::_S_create(__len, size_type(<span class="number">0</span>), __a);</span><br><span class="line">     <span class="comment">//将数据拷贝纸__r的指向位置</span></span><br><span class="line">	_M_copy(__r-&gt;_M_refdata(), __buf, __len);</span><br><span class="line">	__try</span><br><span class="line">	  &#123;</span><br><span class="line">	    <span class="keyword">while</span> (__beg != __end)</span><br><span class="line">	      &#123;</span><br><span class="line">		<span class="keyword">if</span> (__len == __r-&gt;_M_capacity)</span><br><span class="line">		  &#123;</span><br><span class="line">		    <span class="comment">// Allocate more space.</span></span><br><span class="line">            <span class="comment">//分配更多内存，销毁老的指针</span></span><br><span class="line">		    _Rep* __another = _Rep::_S_create(__len + <span class="number">1</span>, __len, __a);</span><br><span class="line">		    _M_copy(__another-&gt;_M_refdata(), __r-&gt;_M_refdata(), __len);</span><br><span class="line">		    __r-&gt;_M_destroy(__a);</span><br><span class="line">		    __r = __another;</span><br><span class="line">		  &#125;</span><br><span class="line">		__r-&gt;_M_refdata()[__len++] = *__beg;</span><br><span class="line">		++__beg;</span><br><span class="line">	      &#125;</span><br><span class="line">	  &#125;</span><br><span class="line">	__catch(...)</span><br><span class="line">	  &#123;</span><br><span class="line">	    __r-&gt;_M_destroy(__a);</span><br><span class="line">	    __throw_exception_again;</span><br><span class="line">	  &#125;</span><br><span class="line">    <span class="comment">// 返回指向的数据，及最终M_dataplus指向实际存储的数据</span></span><br><span class="line">	__r-&gt;_M_set_length_and_sharable(__len);</span><br><span class="line">	<span class="keyword">return</span> __r-&gt;_M_refdata();</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+<p>其中，<code>_Rep::_S_create</code>的定义如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"> <span class="keyword">template</span>&lt;<span class="keyword">typename</span> _CharT, <span class="keyword">typename</span> _Traits, <span class="keyword">typename</span> _Alloc&gt;</span><br><span class="line">   <span class="keyword">typename</span> basic_string&lt;_CharT, _Traits, _Alloc&gt;::_Rep*</span><br><span class="line">   basic_string&lt;_CharT, _Traits, _Alloc&gt;::_Rep::</span><br><span class="line">   _S_create(size_type __capacity, size_type __old_capacity,</span><br><span class="line">      <span class="keyword">const</span> _Alloc&amp; __alloc)</span><br><span class="line">   &#123;</span><br><span class="line">    <span class="keyword">if</span> (__capacity &gt; _S_max_size)</span><br><span class="line">__throw_length_error(__N(<span class="string">"basic_string::_S_create"</span>));</span><br><span class="line"></span><br><span class="line">     <span class="comment">//对齐页面大小及头部大小，其中头部带下是malloc分配时内存页面对齐时所需要使用的</span></span><br><span class="line">     <span class="keyword">const</span> size_type __pagesize = <span class="number">4096</span>;</span><br><span class="line">     <span class="keyword">const</span> size_type __malloc_header_size = <span class="number">4</span> * <span class="keyword">sizeof</span>(<span class="keyword">void</span>*);</span><br><span class="line">    </span><br><span class="line">     <span class="comment">//一次扩大至少两倍容量，避免频繁的内存分配</span></span><br><span class="line">     <span class="keyword">if</span> (__capacity &gt; __old_capacity &amp;&amp; __capacity &lt; <span class="number">2</span> * __old_capacity)</span><br><span class="line">__capacity = <span class="number">2</span> * __old_capacity;</span><br><span class="line"></span><br><span class="line">     <span class="comment">//多申请一个字节用以存储'\0'</span></span><br><span class="line">    size_type __size = (__capacity + <span class="number">1</span>) * <span class="keyword">sizeof</span>(_CharT) + <span class="keyword">sizeof</span>(_Rep);</span><br><span class="line"></span><br><span class="line">     <span class="comment">//进行内存对齐的实际长度，需要加上头部长度</span></span><br><span class="line">    <span class="keyword">const</span> size_type __adj_size = __size + __malloc_header_size;</span><br><span class="line">     <span class="keyword">if</span> (__adj_size &gt; __pagesize &amp;&amp; __capacity &gt; __old_capacity)</span><br><span class="line">&#123;</span><br><span class="line">     <span class="comment">//进行页面对齐</span></span><br><span class="line">  <span class="keyword">const</span> size_type __extra = __pagesize - __adj_size % __pagesize;</span><br><span class="line">  __capacity += __extra / <span class="keyword">sizeof</span>(_CharT);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (__capacity &gt; _S_max_size)</span><br><span class="line">    __capacity = _S_max_size;</span><br><span class="line">  __size = (__capacity + <span class="number">1</span>) * <span class="keyword">sizeof</span>(_CharT) + <span class="keyword">sizeof</span>(_Rep);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">     <span class="comment">//开辟内存</span></span><br><span class="line">     <span class="keyword">void</span>* __place = _Raw_bytes_alloc(__alloc).allocate(__size);</span><br><span class="line">     _Rep *__p = <span class="keyword">new</span> (__place) _Rep;</span><br><span class="line">     __p-&gt;_M_capacity = __capacity;</span><br><span class="line">   </span><br><span class="line">     <span class="comment">//启用引用计数</span></span><br><span class="line">     __p-&gt;_M_set_sharable();</span><br><span class="line">     <span class="keyword">return</span> __p;</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+<p>到现在可以明白的是，<code>_Rep</code>中存储了前文说到的字符串长度、容量、引用计数等信息，同时会申请<code>__capacity + 1</code>大小的内存用以存储实际字符串内容。至此，整个basic_string的初始化机制就比较明朗了。</p>
+<h2 id="内存布局"><a href="#内存布局" class="headerlink" title="内存布局"></a>内存布局</h2><p>一个<code>std::string</code>的内存布局如下：</p>
+<p><img src="F:/pic/cpp/string_mem.png" alt=""></p>
+<h2 id="拷贝"><a href="#拷贝" class="headerlink" title="拷贝"></a>拷贝</h2><p>在gcc4.*版本中，basic_string的拷贝采用了<code>COW</code>机制，通过如下代码可以来验证：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> <span class="built_in">std</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="built_in">string</span> s1 = <span class="string">"s1"</span>;</span><br><span class="line"> </span><br><span class="line">  <span class="built_in">string</span> s2 = s1;</span><br><span class="line">  <span class="built_in">cout</span> &lt;&lt; ((<span class="keyword">void</span>*)(s1.data()) == (<span class="keyword">void</span>*)(s2.data())) &lt;&lt; <span class="built_in">endl</span>;</span><br><span class="line"></span><br><span class="line">  s2[<span class="number">0</span>] = <span class="string">'x'</span>;</span><br><span class="line">  <span class="built_in">cout</span> &lt;&lt; ((<span class="keyword">void</span>*)(s1.data()) == (<span class="keyword">void</span>*)(s2.data())) &lt;&lt; <span class="built_in">endl</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在<code>GCC 4.8.5</code>上编译后的运行结果如下所示：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">1</span><br><span class="line">0</span><br></pre></td></tr></table></figure>
+<p>由此可验证字符串拷贝默认是采用了<code>COW</code>机制，下面来看字符串拷贝的具体实现，它的拷贝构造函数为:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">basic_string(<span class="keyword">const</span> basic_string&amp; __str)</span><br><span class="line">    : _M_dataplus(__str._M_rep()-&gt;_M_grab(_Alloc(__str.get_allocator()),</span><br><span class="line">					  __str.get_allocator()),</span><br><span class="line">		  __str.get_allocator())</span><br><span class="line">      </span><br><span class="line"> _CharT* _M_grab(<span class="keyword">const</span> _Alloc&amp; __alloc1, <span class="keyword">const</span> _Alloc&amp; __alloc2)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> (! _M_is_leaked() &amp;&amp; __alloc1 == __alloc2)</span><br><span class="line">        ? _M_refcopy() : _M_clone (__alloc1);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">_CharT*_M_refcopy() <span class="keyword">throw</span> ()</span><br><span class="line">&#123;</span><br><span class="line">#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING</span><br><span class="line">    <span class="keyword">if</span> ( __builtin_expect(<span class="keyword">this</span> != &amp;_S_empty_rep(), <span class="literal">false</span>))</span><br><span class="line">#endif</span><br><span class="line">        __gnu_cxx::__atomic_add_dispatch (&amp;<span class="keyword">this</span>-&gt; _M_refcount, <span class="number">1</span>);</span><br><span class="line">    <span class="keyword">return</span> _M_refdata();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到，最终调用的<code>_M_refcopy</code>这个函数，将引用计数加1，然后将指针指向<code>_Rep</code>，下面来看实际的修改的行为。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line">reference <span class="keyword">operator</span> []( size_type __pos )</span><br><span class="line">&#123;</span><br><span class="line">    _M_leak();</span><br><span class="line">    <span class="keyword">return</span> _M_data ()[__pos ];<span class="comment">//其中,_M_data()用以获取_M_p</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span> _M_leak ()  <span class="comment">// for use in begin() &amp; non-const op[]</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">//拷贝构造时_M_is_leaked都是为false，即是通过COW生成的，所以会调用_M_leak_hard</span></span><br><span class="line">    <span class="keyword">if</span> (! _M_rep ()-&gt;_M_is_leaked ())</span><br><span class="line">        _M_leak_hard ();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span> _M_leak_hard ()</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> ( _M_rep ()-&gt;_M_is_shared ())</span><br><span class="line">        _M_mutate (<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>);</span><br><span class="line">    _M_rep()-&gt; _M_set_leaked ();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span> _M_mutate ( size_type __pos , size_type __len1, size_type __len2 )</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">const</span> size_type __old_size = <span class="keyword">this</span>-&gt; size ();</span><br><span class="line">    <span class="keyword">const</span> size_type __new_size = __old_size + __len2 - __len1 ;</span><br><span class="line">    <span class="keyword">const</span> size_type __how_much = __old_size - __pos - __len1 ;</span><br><span class="line"></span><br><span class="line">	<span class="comment">//重新生成_Rep,拷贝数据，引用数减1</span></span><br><span class="line">    <span class="keyword">if</span> ( __new_size &gt; <span class="keyword">this</span> -&gt; capacity() || _M_rep ()-&gt;_M_is_shared ())</span><br><span class="line">    &#123;</span><br><span class="line">      </span><br><span class="line">        <span class="keyword">const</span> allocator_type __a = get_allocator ();</span><br><span class="line">        _Rep * __r = _Rep:: _S_create (__new_size , <span class="keyword">this</span>-&gt; capacity (), __a );</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (__pos )</span><br><span class="line">            _M_copy (__r -&gt; _M_refdata(), _M_data (), __pos );</span><br><span class="line">        <span class="keyword">if</span> (__how_much )</span><br><span class="line">            _M_copy (__r -&gt; _M_refdata() + __pos + __len2 ,</span><br><span class="line">            _M_data () + __pos + __len1, __how_much );</span><br><span class="line"></span><br><span class="line">        <span class="comment">//引用计数减1</span></span><br><span class="line">        _M_rep ()-&gt;_M_dispose ( __a);</span><br><span class="line"></span><br><span class="line">        <span class="comment">//指向新的_Rep</span></span><br><span class="line">        _M_data (__r -&gt; _M_refdata());</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (__how_much &amp;&amp; __len1 != __len2 )</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// Work in-place.</span></span><br><span class="line">        _M_move (_M_data () + __pos + __len2 ,</span><br><span class="line">            _M_data () + __pos + __len1, __how_much );</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//设置自身的引用计数</span></span><br><span class="line">    _M_rep()-&gt; _M_set_length_and_sharable (__new_size );</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>所以数据拷贝的发生在数据实际修改的时候。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><ul>
+<li>basic_string仅仅包含一个成员<code>_M_dataplus</code>，它会指向一个<code>_Rep</code>的结构，<code>_Rep</code>中才会实际存放字符串的内容和长度等信息。初始化过程中，对于短字符串，会先存放在栈中，待生成<code>_Rep</code>指针后才会将数据拷贝至<code>_Rep</code>中，这样可以避免初始化短字符串的时候去申请动态内存空间</li>
+<li><code>_Rep</code>中记录了basic_string的引用计数，在<code>GCC4.*</code>版本中，引用计数是默认开启的，所以对象的拷贝构造很快</li>
+<li>因为basic_string中仅包含指向<code>_Rep</code>的指针这一个数据成员，所以<code>sizeof(std::string)</code>等于8，但是由于它还要为它分配<code>_Rep</code>，一个空<code>_Rep</code>的大小为25，所以在<code>GCC4.*</code>中一个空string的大小也为33个字节</li>
+<li><code>COW</code>能有效减少内存拷贝，但是其实现较为复杂，也存在一些其他问题，具体可参考[<a href="[http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html](http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html">std::string的Copy-on-Write：不如想象中美好</a>)，加上新的标准库中<code>std::move</code>的引入导致<code>COW</code>的这种优化不再有不要，所以从GCC5开始已经废弃了<code>COW</code>机制</li>
+</ul>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li><a href="[https://blog.csdn.net/ybxuwei/article/details/51326830](https://blog.csdn.net/ybxuwei/article/details/51326830">std::string源码探秘和性能分析</a>)</li>
+<li><a href="[http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html](http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html">深入剖析 linux GCC 4.4 的 STL string</a>)</li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/03/17/tcp-reuse-addr-port/" rel="next" title="TCP中SO_REUSEADDR及SO_REUSEPORT区别">
+                <i class="fa fa-chevron-left"></i> TCP中SO_REUSEADDR及SO_REUSEPORT区别
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Leeshine</p>
+              <p class="site-description motion-element" itemprop="description">Stay Hungry, Stay Foolish</p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">15</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">11</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/leeshine" target="_blank" title="Github">
+                      
+                        <i class="fa fa-fw fa-github"></i>Github</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:lvshanchun@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义"><span class="nav-number">1.</span> <span class="nav-text">定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#构造"><span class="nav-number">2.</span> <span class="nav-text">构造</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存布局"><span class="nav-number">3.</span> <span class="nav-text">内存布局</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#拷贝"><span class="nav-number">4.</span> <span class="nav-text">拷贝</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#总结"><span class="nav-number">5.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Leeshine</span>
+
+  
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Muse</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
