@@ -233,6 +233,187 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/01/24/leveldb-compaction/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2019/01/24/leveldb-compaction/" itemprop="url">LevelDB Compaction</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-01-24T21:24:17+08:00">
+                2019-01-24
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h2 id="作用"><a href="#作用" class="headerlink" title="作用"></a>作用</h2><p>LevelDB中将随机写在内存中缓存并进行排序(memtable)，从而将随机写转化成顺序写来提高数据的写入速度，在磁盘上它是以sstable的格式来持久化存储数据的。磁盘上的sstable文件是分层存储的，层级越高，容量就越大，存储的文件就越旧。随着数据的持续写入，memtable达到阈值之后会flush到level 0的sstable中，这个过程被称之为minor compaction，由于这一层级的文件是有memtable直接刷写下来的，所以sstable之间的key可能会存在重叠。</p>
+<p>在查找一个key时，系统会先去memtable中查找，若未找到，则会按层级去sstable中查找。由于level 0中的sstable中的key是可能重叠的，所以在查找level0时可能要遍历多个sstable文件，这样会导致查询效率较低。所以当level 0中的文件数较多时，会出发major compaction，将该层的文件同下层合并。</p>
+<p>level 0以上的文件是通过compaction来生成的，所以同一层的文件之间的key是不存在重叠的，但是该层的文件量也不能太大，否则会降低key的查找效率。同时，文件量太大也会造成major compaction的时候IO负载过高，影响系统的正常读写。所以LevelDB中会分多层来存储sstable文件，层级越高，容量越大，所存储的文件也越久。</p>
+<p>综上，Compaction的机制如下：</p>
+<ul>
+<li>当memtable达到阈值时，会触发minor compaction，将memtable中的数据flush成sstable文件，防止占用过多内存</li>
+<li>当level 0中的文件数过多时，会触发major compaction，将该层的部分文件与上层合并，提高查询效率</li>
+<li>当level 0以上某层文件总量过大时，会触发major compaction，提高查询效率，同时避免之后参与compaction的数据量过大</li>
+</ul>
+<h2 id="流程"><a href="#流程" class="headerlink" title="流程"></a>流程</h2><h3 id="Compaction"><a href="#Compaction" class="headerlink" title="Compaction"></a>Compaction</h3><p>Compaction最终是通过调用<code>BackgroundCompaction</code>来执行的，执行流程如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">BackgroundCompaction() &#123;</span><br><span class="line">	<span class="keyword">if</span>(imm_ != <span class="literal">NULL</span>) &#123;</span><br><span class="line">      	<span class="comment">//minor compaction</span></span><br><span class="line">		CompactMemtable() ;</span><br><span class="line">		<span class="keyword">return</span> ;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">    <span class="comment">//major compaction</span></span><br><span class="line">	<span class="keyword">if</span>(is_manual) &#123;</span><br><span class="line">		ManualCompaction* m = manual_compaction_;</span><br><span class="line">    	c = versions_-&gt;CompactRange(m-&gt;level, m-&gt;begin, m-&gt;end);</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		 c = versions_-&gt;PickCompaction();</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (c == <span class="literal">NULL</span>) &#123;</span><br><span class="line">    	<span class="comment">// Nothing to do</span></span><br><span class="line">  	&#125; <span class="keyword">else</span> <span class="keyword">if</span> (!is_manual &amp;&amp; c-&gt;IsTrivialMove()) &#123;</span><br><span class="line">      	<span class="comment">//平移文件至下一层</span></span><br><span class="line">	    c-&gt;edit()-&gt;DeleteFile(c-&gt;level(), f-&gt;number);</span><br><span class="line">    	c-&gt;edit()-&gt;AddFile(c-&gt;level() + <span class="number">1</span>, f-&gt;number, f-&gt;file_size, f-&gt;smallest, f-&gt;largest);</span><br><span class="line">    	status = versions_-&gt;LogAndApply(c-&gt;edit(), &amp;mutex_);</span><br><span class="line">  	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  		DoCompactionWork(compact);</span><br><span class="line">  	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>整体的流程图如下：</p>
+<p><img src="/images/level/pic1.png" alt=""></p>
+<h3 id="Minor-Compaction"><a href="#Minor-Compaction" class="headerlink" title="Minor Compaction"></a>Minor Compaction</h3><p>其中，<code>CompactMemtable</code>用以将memtable中的文件flush成sstable文件，它的流程如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">CompactMemtable() &#123;</span><br><span class="line">	VersionEdit edit;</span><br><span class="line">  	Version* base = versions_-&gt;current();</span><br><span class="line">  	<span class="comment">//将数据刷写至sstable中</span></span><br><span class="line">  	Status s = WriteLevel0Table(imm_, &amp;edit, base);</span><br><span class="line">  	versions_-&gt;LogAndApply(&amp;edit, &amp;mutex_);</span><br><span class="line">  	DeleteObsoleteFiles();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>以上流程中，Version是系统用来管理系统中sstable文件的，每次进行compact后，都会新生成一个Version用来管理磁盘上sstable文件的状态，VersionEdit则代表此次compact中文件的变化情况，关于Version机制会在下节讨论。</p>
+<p>在<code>CompactMemtable</code>中会调用<code>WriteLevel0Table</code>将<code>memtable</code>刷写至<code>sstable</code>中，机制如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base) &#123;</span><br><span class="line">	FileMetaData meta; </span><br><span class="line">	BuildTable(dbname_, env_, options_, table_cache_, iter, &amp;meta);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span>(meta.file_size &gt; <span class="number">0</span>) &#123;</span><br><span class="line">		<span class="keyword">if</span> (base != <span class="literal">NULL</span>) &#123;</span><br><span class="line">			<span class="comment">//为minor compact形成的sstfile选择合适的层级，memtable不一定是compact至level0中</span></span><br><span class="line">			<span class="comment">//如果level0中存在与此次compact key重叠的文件，则直接flush至level0</span></span><br><span class="line">			<span class="comment">//否则可以沉降至没有重叠区间的一个level，且沉降至该level后不会造成之后的大量compaction（与level+1层的重叠不能过多）</span></span><br><span class="line">      		level = base-&gt;PickLevelForMemTableOutput(min_user_key, max_user_key);</span><br><span class="line">    	&#125;</span><br><span class="line">    	<span class="comment">//添加一个sstfile</span></span><br><span class="line">    	edit-&gt;AddFile(level, meta.number, meta.file_size,</span><br><span class="line">                meta.smallest, meta.largest);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中，需要注意的是，memtable不总是直接flush值level 0中的，如果level 0中没有文件与memtable的数据重合，则可以直接刷写至更高的层级，这样可以减少compaction的次数。但同时，如果某一层（level层）没有文件与memtable中的数据重合，但是下一层（level+1）中与memtable中重合的文件尺寸较大，也不能直接放入level中，否则的话会导致之后该文件compaction的时候设计到的数据量太大，影响系统的正常读写。</p>
+<h3 id="Major-Compaction"><a href="#Major-Compaction" class="headerlink" title="Major Compaction"></a>Major Compaction</h3><p>Major Compaction的第一步是选择生成compaction的信息，根据compaction是否是手动触发的，具体机制又有不同，如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//根据手动compact时输入的level及key的范围生成compact信息</span></span><br><span class="line"><span class="comment">//compact信息中最重要的信息就是inputs，即参与compaction的sstfile</span></span><br><span class="line"><span class="comment">//其中inputs[0]中存储的是level层的文件</span></span><br><span class="line"><span class="comment">//inputs是与inputs[0]中的key存在交集的level+1层的文件</span></span><br><span class="line">CompactRange(level, begin, end) &#123;</span><br><span class="line">	<span class="comment">//获取第一层待compact的文件</span></span><br><span class="line">	current_-&gt;GetOverlappingInputs(level, begin, end, &amp;inputs);</span><br><span class="line">  	<span class="keyword">if</span> (inputs.empty()) &#123;</span><br><span class="line">   		<span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">  	&#125;</span><br><span class="line"></span><br><span class="line">  	Compaction* c = <span class="keyword">new</span> Compaction(options_, level);</span><br><span class="line">  	c-&gt;inputs_[<span class="number">0</span>] = inputs;</span><br><span class="line">  	<span class="comment">//获取下一层被compact的文件</span></span><br><span class="line">  	SetupOtherInputs(c);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">PickCompaction() &#123;</span><br><span class="line">	<span class="comment">//根据某层的总容量或者查找次数来触发compaction，其中容量触发的优先级更高</span></span><br><span class="line">	<span class="keyword">const</span> <span class="keyword">bool</span> size_compaction = (current_-&gt;compaction_score_ &gt;= <span class="number">1</span>);</span><br><span class="line">  	<span class="keyword">const</span> <span class="keyword">bool</span> seek_compaction = (current_-&gt;file_to_compact_ != <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">  	<span class="keyword">if</span> (size_compaction) &#123;</span><br><span class="line">  		level = current_-&gt;compaction_level_;</span><br><span class="line">    	c = <span class="keyword">new</span> Compaction(options_, level);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Pick the first file that comes after compact_pointer_[level]</span></span><br><span class="line">    <span class="comment">// compact_pointer_中记录的是每层上次compaction中最大的key，选择上次最大的key后的一个文件</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; current_-&gt;files_[level].size(); i++) &#123;</span><br><span class="line">      FileMetaData* f = current_-&gt;files_[level][i];</span><br><span class="line">      <span class="keyword">if</span> (compact_pointer_[level].empty() ||</span><br><span class="line">          icmp_.Compare(f-&gt;largest.Encode(), compact_pointer_[level]) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        c-&gt;inputs_[<span class="number">0</span>].push_back(f);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (c-&gt;inputs_[<span class="number">0</span>].empty()) &#123;</span><br><span class="line">      <span class="comment">// Wrap-around to the beginning of the key space</span></span><br><span class="line">      <span class="comment">//未选到文件的话，则选择第一个文件来进行compact</span></span><br><span class="line">      c-&gt;inputs_[<span class="number">0</span>].push_back(current_-&gt;files_[level][<span class="number">0</span>]);</span><br><span class="line">      &#125;</span><br><span class="line">  	&#125; <span class="keyword">else</span> <span class="keyword">if</span> (seek_compaction) &#123;</span><br><span class="line">  		c-&gt;inputs_[<span class="number">0</span>].push_back(current_-&gt;file_to_compact_)a</span><br><span class="line">  	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  		<span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">  	&#125;</span><br><span class="line">  	<span class="comment">//根据inputs[0]来生成inputs[1]</span></span><br><span class="line">  	SetupOtherInputs(c);</span><br><span class="line">  	<span class="keyword">return</span> c;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>生成compaction信息后，便可开始compaction流程，如果level+1没有文件与待compaction的文件存在重叠，则可以考虑将文件直接下移，但是下移后也不能造成之后的compaction数据量过大，LevelDB这里是通过grandparent层级(level+2)的重叠数据量来判断的:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">IsTrivialMove() &#123;</span><br><span class="line">	<span class="comment">//如果level+2层存在与compact_range重合的数据较大，则不允许直接移动文件，否则之后会造成大量的compaction</span></span><br><span class="line">	 <span class="keyword">return</span> (num_input_files(<span class="number">0</span>) == <span class="number">1</span> &amp;&amp; num_input_files(<span class="number">1</span>) == <span class="number">0</span> &amp;&amp;</span><br><span class="line">          TotalFileSize(grandparents_) &lt;=</span><br><span class="line">            MaxGrandParentOverlapBytes(vset-&gt;options_));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果不是直接平移，则调用<code>DoCompactionWork</code>来修改sstable，机制如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//根据输入在高层生成新的sstfile</span></span><br><span class="line">DoCompactionWork() &#123;</span><br><span class="line">	<span class="comment">//对所有传入的sstfile中的键值使用归并排序合并</span></span><br><span class="line">	Iterator* input = versions_-&gt;MakeInputIterator(compact-&gt;compaction);</span><br><span class="line">	input-&gt;SeekToFirst();</span><br><span class="line">	<span class="comment">//遍历所有key</span></span><br><span class="line">	<span class="keyword">for</span> ( input-&gt;Valid() ) &#123;</span><br><span class="line">		<span class="keyword">bool</span> drop = <span class="literal">false</span>;</span><br><span class="line">		 <span class="keyword">if</span> (!ParseInternalKey(key, &amp;ikey)) &#123;</span><br><span class="line">      		<span class="comment">// Do not hide error keys</span></span><br><span class="line">     		current_user_key.clear();</span><br><span class="line">      		has_current_user_key = <span class="literal">false</span>;</span><br><span class="line">     		last_sequence_for_key = kMaxSequenceNumber;</span><br><span class="line">    	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    		<span class="keyword">if</span> (!has_current_user_key ||</span><br><span class="line">          user_comparator()-&gt;Compare(ikey.user_key,</span><br><span class="line">                                     Slice(current_user_key)) != <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="comment">//这个user_key是第一次出现</span></span><br><span class="line">        current_user_key.assign(ikey.user_key.data(), ikey.user_key.size());</span><br><span class="line">        has_current_user_key = <span class="literal">true</span>;</span><br><span class="line">        last_sequence_for_key = kMaxSequenceNumber;</span><br><span class="line">      	&#125;</span><br><span class="line"></span><br><span class="line">      	<span class="keyword">if</span> (last_sequence_for_key &lt;= compact-&gt;smallest_snapshot) &#123;</span><br><span class="line">        <span class="comment">// last_sequence_for_key比快照中的key还旧，需要删除</span></span><br><span class="line">        drop = <span class="literal">true</span>;    <span class="comment">// rule A</span></span><br><span class="line">      &#125; <span class="keyword">else</span> <span class="keyword">if</span> (ikey.type == kTypeDeletion &amp;&amp;</span><br><span class="line">                 ikey.sequence &lt;= compact-&gt;smallest_snapshot &amp;&amp;</span><br><span class="line">                 compact-&gt;compaction-&gt;IsBaseLevelForKey(ikey.user_key)) &#123;</span><br><span class="line">       			<span class="comment">// 一个被标记为删除的key满足如下所有条件，才可删除：</span></span><br><span class="line">        		<span class="comment">// (1) 更高层不会出现该key</span></span><br><span class="line">        		<span class="comment">// (2) 更低层的key的sequence number更小</span></span><br><span class="line">        		<span class="comment">// (3) 符合如上规则A</span></span><br><span class="line">        		drop = <span class="literal">true</span>;</span><br><span class="line">      		&#125;</span><br><span class="line"></span><br><span class="line">      		last_sequence_for_key = ikey.sequence;</span><br><span class="line">    	&#125;</span><br><span class="line"></span><br><span class="line">	 	<span class="comment">//如果该key不需要删除，则写入新的sstfile中</span></span><br><span class="line">	 	<span class="keyword">if</span>(!drop) &#123;</span><br><span class="line">	 		<span class="comment">//如果当前output file为空则打开一个output file</span></span><br><span class="line"></span><br><span class="line">	 		<span class="keyword">if</span> (compact-&gt;builder-&gt;NumEntries() == <span class="number">0</span>) &#123;</span><br><span class="line">        		compact-&gt;current_output()-&gt;smallest.DecodeFrom(key);</span><br><span class="line">     		&#125;</span><br><span class="line">      		compact-&gt;current_output()-&gt;largest.DecodeFrom(key);</span><br><span class="line">      		compact-&gt;builder-&gt;Add(key, input-&gt;value());</span><br><span class="line"></span><br><span class="line">      		<span class="comment">//如果当前output file过大，则关闭它</span></span><br><span class="line">	 	&#125;</span><br><span class="line">	 	input-&gt;Next();</span><br><span class="line">	 &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中，LogAndApply是根据VersionEdit来生成新的version，并将新生成的version数据append到manifest中来进行持久化存储，这部分会在下节展开。</p>
+<h2 id="Version"><a href="#Version" class="headerlink" title="Version"></a>Version</h2><p>Version机制作用简要概括如下：</p>
+<ul>
+<li>维护sstfile的索引信息，包括每层由哪些文件，每个文件的key range等</li>
+<li>根据sstfile信息，生成compaction相关的信息</li>
+<li>在每次compaction后，将元数据持久化至manifest中，供DB启动或恢复时加载</li>
+<li>维护版本信息，在此基础之上生成快照</li>
+</ul>
+<p>Version机制涉及到数据结构主要有三个：<code>Version</code>，<code>VersionEdit</code>，<code>VersionSet</code>，其中每个Version都记录了当前sstfile的索引信息，每次compaction后都会生成一个新的version，而这次compaction的文件变化情况就是用VersionEdit来记录的，简单来说就是：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">version0 + versionedit = version1</span><br></pre></td></tr></table></figure>
+<p>此外，为了支持快照及MVCC，老的version不会马上就删除，而是通过VersionSet来管理，VersionSet中所有的version是通过双向链表来连接的，这样可以方便地查找各个version对应的数据，简单来说就是：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">versionset = version0 + version1 + ... + currentversion</span><br></pre></td></tr></table></figure>
+<p>如下所示：</p>
+<p><img src="/images/level/pic2.png" alt=""></p>
+<h3 id="VersionEdit"><a href="#VersionEdit" class="headerlink" title="VersionEdit"></a>VersionEdit</h3><p>VersionEdit的主要结构如下，它记录了一次compaction后sstfile的变化信息，包括新增哪些文件、删除哪些文件、某个level参与compaction的最大key是什么：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//一个VersionEdit总是与一次compaction相关</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">VersionEdit</span> &#123;</span></span><br><span class="line">  <span class="comment">//要删除的文件集合</span></span><br><span class="line">  <span class="keyword">typedef</span> <span class="built_in">std</span>::<span class="built_in">set</span>&lt; <span class="built_in">std</span>::pair&lt;<span class="keyword">int</span>, <span class="keyword">uint64_t</span>&gt; &gt; DeletedFileSet;</span><br><span class="line">  <span class="comment">//要新增的文件集合</span></span><br><span class="line">  <span class="built_in">std</span>::<span class="built_in">vector</span>&lt; <span class="built_in">std</span>::pair&lt;<span class="keyword">int</span>, FileMetaData&gt; &gt; new_files_;</span><br><span class="line">  <span class="comment">//记录此次compaction时，某层参与的最大key，下次compaction时会选择该key的后一个文件来进行compaction</span></span><br><span class="line">  <span class="built_in">std</span>::<span class="built_in">vector</span>&lt; <span class="built_in">std</span>::pair&lt;<span class="keyword">int</span>, InternalKey&gt; &gt; compact_pointers_;</span><br><span class="line"></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">SetCompactPointer</span><span class="params">(<span class="keyword">int</span> level, <span class="keyword">const</span> InternalKey&amp; key)</span> </span>&#123;&#125;;</span><br><span class="line"></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">AddFile</span><span class="params">(<span class="keyword">int</span> level, <span class="keyword">uint64_t</span> file,</span></span></span><br><span class="line"><span class="function"><span class="params">               <span class="keyword">uint64_t</span> file_size,</span></span></span><br><span class="line"><span class="function"><span class="params">               <span class="keyword">const</span> InternalKey&amp; smallest,</span></span></span><br><span class="line"><span class="function"><span class="params">               <span class="keyword">const</span> InternalKey&amp; largest)</span> </span>&#123;&#125; ;</span><br><span class="line">   </span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">DeleteFile</span><span class="params">(<span class="keyword">int</span> level, <span class="keyword">uint64_t</span> file)</span> </span>&#123;&#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<h3 id="Version-1"><a href="#Version-1" class="headerlink" title="Version"></a>Version</h3><p>LevelDB是通过version来记录数据库是有哪些sst文件组成的，每次compaction后都会生成新的version，version是LevelDB实现快照和MVCC的基础，它的主要结构如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Version</span> &#123;</span></span><br><span class="line">	VersionSet* vset_; </span><br><span class="line">	<span class="comment">//更旧的版本</span></span><br><span class="line">	Version* next_;</span><br><span class="line">	<span class="comment">//更新的版本</span></span><br><span class="line">	Version* prev_;</span><br><span class="line">	<span class="comment">//该version的引用数，初始为1，读取或者创建快照都会增加引用数</span></span><br><span class="line">	<span class="keyword">int</span> refs_;</span><br><span class="line"></span><br><span class="line">	<span class="comment">//当前sst文件的索引信息</span></span><br><span class="line">	<span class="built_in">std</span>::<span class="built_in">vector</span>&lt;FileMetaData*&gt; files_[config::kNumLevels];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>其中一个很重要的成员是引用数。。在一次compaction后，需要删除的sst文件并不会立马删除，因为此时可能会有读请求或者快照仍需要查找旧的文件来获取数据，这都是通过引用计数来控制的。一个version在生成时默认引用数为1，引用数变为0的时候便可以删除，当读请求释放或者该version不是最新版本时，refs_都会减1。总的来说，LevelDB的MVCC和快照机制是由一下几个部分组成：</p>
+<ul>
+<li>sst文件是不可变的，在compaction的时候也不影响read</li>
+<li>每个key在内部存储时都会带上SequenceNumber，打快照时只需记录对应的SequenceNumber即可</li>
+<li>version通过引用计数来保证资源的有效性，防止write影响read或者影响快照</li>
+</ul>
+<h3 id="VersionSet"><a href="#VersionSet" class="headerlink" title="VersionSet"></a>VersionSet</h3><p>VersionSet管理系统当前所有version，并负责这些元数据的持久化，其中最重要的方法就是<code>LogAndApply</code>，在每次version发生变化时该方法都会被调用，根据VersionEdit生成一个最新的Version，并 插入链表头部，持久化存储在manifest中，如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br></pre></td><td class="code"><pre><span class="line">LogAndApply(VersionEdit* edit, port::Mutex* mu) &#123;</span><br><span class="line">	Version* v = <span class="keyword">new</span> Version(<span class="keyword">this</span>);</span><br><span class="line">  	&#123;</span><br><span class="line">    	<span class="function">Builder <span class="title">builder</span><span class="params">(<span class="keyword">this</span>, current_)</span></span>;</span><br><span class="line">    	<span class="comment">//将edit生效，记录在builder中</span></span><br><span class="line">    	builder.Apply(edit);</span><br><span class="line">    	<span class="comment">//生成新的version</span></span><br><span class="line">    	builder.SaveTo(v);</span><br><span class="line">  	&#125;</span><br><span class="line">  	Finalize(v);</span><br><span class="line"></span><br><span class="line">  	<span class="comment">//创建新的manifest文件</span></span><br><span class="line">  	<span class="keyword">if</span> (descriptor_log_ == <span class="literal">NULL</span>) &#123;</span><br><span class="line">    <span class="comment">// No reason to unlock *mu here since we only hit this path in the</span></span><br><span class="line">    <span class="comment">// first call to LogAndApply (when opening the database).</span></span><br><span class="line">    assert(descriptor_file_ == <span class="literal">NULL</span>);</span><br><span class="line">    new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);</span><br><span class="line">    edit-&gt;SetNextFile(next_file_number_);</span><br><span class="line">    s = env_-&gt;NewWritableFile(new_manifest_file, &amp;descriptor_file_);</span><br><span class="line">    <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">      descriptor_log_ = <span class="keyword">new</span> <span class="built_in">log</span>::Writer(descriptor_file_);</span><br><span class="line">      s = WriteSnapshot(descriptor_log_);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">//写入manifest时候，可以释放锁，让其他写入线程能进去队列排队</span></span><br><span class="line">  &#123;</span><br><span class="line">    mu-&gt;Unlock();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Write new record to MANIFEST log</span></span><br><span class="line">    <span class="comment">//将变化写入manifest中</span></span><br><span class="line">    <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">      <span class="built_in">std</span>::<span class="built_in">string</span> record;</span><br><span class="line">      edit-&gt;EncodeTo(&amp;record);</span><br><span class="line">      s = descriptor_log_-&gt;AddRecord(record);</span><br><span class="line">      <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">        s = descriptor_file_-&gt;Sync();</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">if</span> (!s.ok()) &#123;</span><br><span class="line">        Log(options_-&gt;info_log, <span class="string">"MANIFEST write: %s\n"</span>, s.ToString().c_str());</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// If we just created a new descriptor file, install it by writing a</span></span><br><span class="line">    <span class="comment">// new CURRENT file that points to it.</span></span><br><span class="line">    <span class="comment">//将current文件指向最新的manifest文件</span></span><br><span class="line">    <span class="keyword">if</span> (s.ok() &amp;&amp; !new_manifest_file.empty()) &#123;</span><br><span class="line">      s = SetCurrentFile(env_, dbname_, manifest_file_number_);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    mu-&gt;Lock();</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(s.ok()) &#123;</span><br><span class="line">  	<span class="comment">//将版本v插入头部，使current_指向该版本</span></span><br><span class="line">  	AppendVersion(v);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="触发机制"><a href="#触发机制" class="headerlink" title="触发机制"></a>触发机制</h2><p>LevelDB中总共有以下几种情况会出发compaction：</p>
+<ul>
+<li>memtable达到阈值时会出发minor compaction</li>
+<li>手动触发：系统提供结构供用户指定key range及level来出发compaction，默认情况下，手动触发的compaction比自动触发的高</li>
+<li>文件数触发：由于level 0中的文件间key range可能存在重叠，所以需要严格控制该层的文件数，该层的文件数大于阈值的时候并发触发major compaction</li>
+<li>容量触发：level 0之上的文件需要严格控制容量，提高查询效率和避免过大的数据参与compaction，所以当level 0上某层的总数据量超过阈值时，便会触发major compaction</li>
+<li>seek触发：系统在查找Key时会记录查找次数，由于每次查找都会消耗额外的IO，当查找次数过多时，对应的IO消耗会大于一次compaction所带来的IO，此时系统会触发compaction来降低某些key的查找次数</li>
+</ul>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><p><a href="http://catkang.github.io/2017/02/03/leveldb-version.html" target="_blank" rel="noopener">庖丁解LevelDB之版本控制</a></p>
+<p><a href="https://draveness.me/bigtable-leveldb" target="_blank" rel="noopener">浅析 Bigtable 和 LevelDB 的实现</a></p>
+<p><a href="http://bean-li.github.io/leveldb-version/" target="_blank" rel="noopener">leveldb之Version VersionEdit and VersionSet</a></p>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/01/24/leveldb-file-format/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -1432,7 +1613,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">16</span>
+                  <span class="site-state-item-count">17</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>

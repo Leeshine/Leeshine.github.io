@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="c++,">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="FBString是folly中关于std::string的实现，它更加精细地控制了内存的使用，在64位X86平台上，它的实现方式如下：  对于小字符串（0~23字节），直接将数据存储在栈内，不需在对上开辟空间，因为栈的访问效率较高 中等长度的字符串（24~254字节），在堆上开辟空间，发生拷贝时直接复制整个字符串 大长度的字符串（大于254字节），在堆上开辟空间，采用COW机制  定义fbstri">
+<meta name="keywords" content="c++">
+<meta property="og:type" content="article">
+<meta property="og:title" content="漫谈C++ string（3）：FBString的实现">
+<meta property="og:url" content="http://yoursite.com/2019/06/08/cpp-string3/index.html">
+<meta property="og:site_name" content="Leesine&#39;s Blog">
+<meta property="og:description" content="FBString是folly中关于std::string的实现，它更加精细地控制了内存的使用，在64位X86平台上，它的实现方式如下：  对于小字符串（0~23字节），直接将数据存储在栈内，不需在对上开辟空间，因为栈的访问效率较高 中等长度的字符串（24~254字节），在堆上开辟空间，发生拷贝时直接复制整个字符串 大长度的字符串（大于254字节），在堆上开辟空间，采用COW机制  定义fbstri">
+<meta property="og:locale" content="default">
+<meta property="og:image" content="http://yoursite.com/images/cpp/fbstring_small.png">
+<meta property="og:image" content="http://yoursite.com/images/cpp/fbstring_medium.png">
+<meta property="og:image" content="http://yoursite.com/images/cpp/fbstring_large.png">
+<meta property="og:updated_time" content="2019-06-08T07:13:30.091Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="漫谈C++ string（3）：FBString的实现">
+<meta name="twitter:description" content="FBString是folly中关于std::string的实现，它更加精细地控制了内存的使用，在64位X86平台上，它的实现方式如下：  对于小字符串（0~23字节），直接将数据存储在栈内，不需在对上开辟空间，因为栈的访问效率较高 中等长度的字符串（24~254字节），在堆上开辟空间，发生拷贝时直接复制整个字符串 大长度的字符串（大于254字节），在堆上开辟空间，采用COW机制  定义fbstri">
+<meta name="twitter:image" content="http://yoursite.com/images/cpp/fbstring_small.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/06/08/cpp-string3/">
+
+
+
+
+
+  <title>漫谈C++ string（3）：FBString的实现 | Leesine's Blog</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope="" itemtype="http://schema.org/WebPage" lang="default">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Leesine's Blog</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Stay Hungry, Stay Foolish</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/06/08/cpp-string3/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">漫谈C++ string（3）：FBString的实现</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-06-08T15:11:10+08:00">
+                2019-06-08
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p><code>FBString</code>是<code>folly</code>中关于<code>std::string</code>的实现，它更加精细地控制了内存的使用，在64位X86平台上，它的实现方式如下：</p>
+<ul>
+<li>对于小字符串（0~23字节），直接将数据存储在栈内，不需在对上开辟空间，因为栈的访问效率较高</li>
+<li>中等长度的字符串（24~254字节），在堆上开辟空间，发生拷贝时直接复制整个字符串</li>
+<li>大长度的字符串（大于254字节），在堆上开辟空间，采用COW机制</li>
+</ul>
+<h2 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h2><p><code>fbstring</code>的定义如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> basic_fbstring&lt;<span class="keyword">char</span>&gt; fbstring;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> E, <span class="class"><span class="keyword">class</span> <span class="title">T</span>, <span class="title">class</span> <span class="title">A</span>, <span class="title">class</span> <span class="title">Storage</span>&gt;</span></span><br><span class="line"><span class="class">#<span class="title">else</span></span></span><br><span class="line"><span class="class"><span class="title">template</span> &lt;</span></span><br><span class="line"><span class="class">    typename E,</span></span><br><span class="line"><span class="class">    class T = std::char_traits&lt;E&gt;,</span></span><br><span class="line"><span class="class">    class A = std::allocator&lt;E&gt;,</span></span><br><span class="line"><span class="class">    class Storage = fbstring_core&lt;E&gt;&gt;</span></span><br><span class="line"><span class="class"><span class="title">class</span> <span class="title">basic_fbstring</span> &#123;</span>&#125;</span><br><span class="line"><span class="function">class <span class="title">fbstring_core</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">MediumLarge</span> &#123;</span></span><br><span class="line">    Char* data_;</span><br><span class="line">    <span class="keyword">size_t</span> size_;</span><br><span class="line">    <span class="keyword">size_t</span> capacity_;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">size_t</span> capacity() <span class="keyword">const</span> &#123;</span><br><span class="line">      <span class="keyword">return</span> kIsLittleEndian ? capacity_ &amp; capacityExtractMask : capacity_ &gt;&gt; <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//</span></span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">setCapacity</span><span class="params">(<span class="keyword">size_t</span> cap, Category cat)</span> </span>&#123;</span><br><span class="line">      capacity_ = kIsLittleEndian</span><br><span class="line">          ? cap | (<span class="keyword">static_cast</span>&lt;<span class="keyword">size_t</span>&gt;(cat) &lt;&lt; kCategoryShift)</span><br><span class="line">          : (cap &lt;&lt; <span class="number">2</span>) | <span class="keyword">static_cast</span>&lt;<span class="keyword">size_t</span>&gt;(cat);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;;</span><br><span class="line"></span><br><span class="line">  <span class="comment">//将短字符串存储在栈区，用union存储，可以有效节省内存</span></span><br><span class="line">  <span class="keyword">union</span> &#123;</span><br><span class="line">    <span class="keyword">uint8_t</span> bytes_[<span class="keyword">sizeof</span>(MediumLarge)]; <span class="comment">// 存储所有字节</span></span><br><span class="line">    Char small_[<span class="keyword">sizeof</span>(MediumLarge) / <span class="keyword">sizeof</span>(Char)];</span><br><span class="line">    MediumLarge ml_;</span><br><span class="line">  &#125;;</span><br><span class="line">  </span><br><span class="line">  <span class="keyword">constexpr</span> <span class="keyword">static</span> <span class="keyword">size_t</span> lastChar = <span class="keyword">sizeof</span>(MediumLarge) - <span class="number">1</span>;</span><br><span class="line">  <span class="keyword">constexpr</span> <span class="keyword">static</span> <span class="keyword">size_t</span> maxSmallSize = lastChar / <span class="keyword">sizeof</span>(Char);<span class="comment">//64为x86平台为23个（宽）字节</span></span><br><span class="line">  <span class="keyword">constexpr</span> <span class="keyword">static</span> <span class="keyword">size_t</span> maxMediumSize = <span class="number">254</span> / <span class="keyword">sizeof</span>(Char);</span><br><span class="line">  <span class="keyword">constexpr</span> <span class="keyword">static</span> <span class="keyword">uint8_t</span> categoryExtractMask = kIsLittleEndian ? <span class="number">0xC0</span> : <span class="number">0x3</span>;</span><br><span class="line">  <span class="keyword">constexpr</span> <span class="keyword">static</span> <span class="keyword">size_t</span> kCategoryShift = (<span class="keyword">sizeof</span>(<span class="keyword">size_t</span>) - <span class="number">1</span>) * <span class="number">8</span>;</span><br><span class="line">  <span class="keyword">constexpr</span> <span class="keyword">static</span> <span class="keyword">size_t</span> capacityExtractMask = kIsLittleEndian</span><br><span class="line">      ? ~(<span class="keyword">size_t</span>(categoryExtractMask) &lt;&lt; kCategoryShift)</span><br><span class="line">      : <span class="number">0x0</span> <span class="comment">/* unused */</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面来看<code>fbstring_core</code>的实现。</p>
+<h2 id="构造"><a href="#构造" class="headerlink" title="构造"></a>构造</h2><p>还是以最常见的std::string(“xxx”)这种构造方式为例来看它对应的构造函数：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">fbstring_core(</span><br><span class="line">    <span class="keyword">const</span> Char* <span class="keyword">const</span> data,</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> size,</span><br><span class="line">    <span class="keyword">bool</span> disableSSO = FBSTRING_DISABLE_SSO) &#123;</span><br><span class="line">  <span class="keyword">if</span> (!disableSSO &amp;&amp; size &lt;= maxSmallSize) &#123;</span><br><span class="line">    <span class="comment">//SSO（Small String Optiomition），即短字符串优化</span></span><br><span class="line">    initSmall(data, size);</span><br><span class="line">  &#125; <span class="keyword">else</span> <span class="keyword">if</span> (size &lt;= maxMediumSize) &#123;</span><br><span class="line">    initMedium(data, size);</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    initLarge(data, size);</span><br><span class="line">  &#125;</span><br><span class="line">  FBSTRING_ASSERT(<span class="keyword">this</span>-&gt;size() == size);</span><br><span class="line">  FBSTRING_ASSERT(</span><br><span class="line">      size == <span class="number">0</span> || <span class="built_in">memcmp</span>(<span class="keyword">this</span>-&gt;data(), data, size * <span class="keyword">sizeof</span>(Char)) == <span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如前文所述，对不不同的size，它的实现方式是不一样的，下面来逐个分析。</p>
+<ul>
+<li>Small</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:initSmall(</span><br><span class="line">    <span class="keyword">const</span> Char* <span class="keyword">const</span> data,</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> size) &#123;</span><br><span class="line">  <span class="comment">// Layout is: Char* data_, size_t size_, size_t capacity_</span></span><br><span class="line">  </span><br><span class="line"> <span class="comment">//如果数据是内存对齐的，则用字长快速复制，否则的话就用保守的memcpy</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> FBSTRING_SANITIZE_ADDRESS</span></span><br><span class="line">  <span class="keyword">if</span> ((<span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">size_t</span>&gt;(data) &amp; (<span class="keyword">sizeof</span>(<span class="keyword">size_t</span>) - <span class="number">1</span>)) == <span class="number">0</span>) &#123;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> byteSize = size * <span class="keyword">sizeof</span>(Char);</span><br><span class="line">    <span class="keyword">constexpr</span> <span class="keyword">size_t</span> wordWidth = <span class="keyword">sizeof</span>(<span class="keyword">size_t</span>);</span><br><span class="line">    <span class="keyword">switch</span> ((byteSize + wordWidth - <span class="number">1</span>) / wordWidth) &#123; <span class="comment">// Number of words.</span></span><br><span class="line">      <span class="keyword">case</span> <span class="number">3</span>:</span><br><span class="line">        ml_.capacity_ = <span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">const</span> <span class="keyword">size_t</span>*&gt;(data)[<span class="number">2</span>];</span><br><span class="line">        FOLLY_FALLTHROUGH;</span><br><span class="line">      <span class="keyword">case</span> <span class="number">2</span>:</span><br><span class="line">        ml_.size_ = <span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">const</span> <span class="keyword">size_t</span>*&gt;(data)[<span class="number">1</span>];</span><br><span class="line">        FOLLY_FALLTHROUGH;</span><br><span class="line">      <span class="keyword">case</span> <span class="number">1</span>:</span><br><span class="line">        ml_.data_ = *<span class="keyword">reinterpret_cast</span>&lt;Char**&gt;(<span class="keyword">const_cast</span>&lt;Char*&gt;(data));</span><br><span class="line">        FOLLY_FALLTHROUGH;</span><br><span class="line">      <span class="keyword">case</span> <span class="number">0</span>:</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; <span class="keyword">else</span></span><br><span class="line">#endif</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="keyword">if</span> (size != <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="comment">//调用memcpy将data复制至small_</span></span><br><span class="line">      fbstring_detail::podCopy(data, data + size, small_);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  setSmallSize(size);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">setSmallSize</span><span class="params">(<span class="keyword">size_t</span> s)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// Warning: this should work with uninitialized strings too,</span></span><br><span class="line">    <span class="comment">// so don't assume anything about the previous value of</span></span><br><span class="line">    <span class="comment">// small_[maxSmallSize].</span></span><br><span class="line">    <span class="comment">//string未经初始化时也要能调用，此时small_中可能没有数据</span></span><br><span class="line">    FBSTRING_ASSERT(s &lt;= maxSmallSize);</span><br><span class="line">    <span class="keyword">constexpr</span> <span class="keyword">auto</span> shift = kIsLittleEndian ? <span class="number">0</span> : <span class="number">2</span>;</span><br><span class="line">    <span class="comment">//用small_中的最后一个字节来存储字符串大小的信息</span></span><br><span class="line">    small_[maxSmallSize] = <span class="keyword">char</span>((maxSmallSize - s) &lt;&lt; shift);</span><br><span class="line">    small_[s] = <span class="string">'\0'</span>;</span><br><span class="line">    FBSTRING_ASSERT(category() == Category::isSmall &amp;&amp; size() == s);</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>由此可见，短字符串的内存结构如下所示：</p>
+<p><img src="/images/cpp/fbstring_small.png" alt=""></p>
+<p>由于需要一个字节存储size，另外需要一个字节存储结束符，所以small_中最多能存22个字节。</p>
+<p>另外还有个问题就是字符串的类型（small、medium、large）是存储在哪的？答案就是同上图的size存在一起，即存在<code>bytes_</code>的最后一个字节中，如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>因为前面也说到，短字符串的长度最多只有22个字节，存储这个长度不需要占用整个字节，所以可以用最后一个字节的高两位来存储字符串的类型，由此可见FBString对内存控制的精细度。</p>
+<ul>
+<li>Medium</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">FOLLY_MALLOC_NOINLINE</span> <span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:initMedium(</span><br><span class="line">    <span class="keyword">const</span> Char* <span class="keyword">const</span> data,</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> size) &#123;</span><br><span class="line">  <span class="comment">// 多分配一个字符用以存储结束符，将data指向分配的首地址</span></span><br><span class="line">  <span class="keyword">auto</span> <span class="keyword">const</span> allocSize = goodMallocSize((<span class="number">1</span> + size) * <span class="keyword">sizeof</span>(Char));</span><br><span class="line">  ml_.data_ = <span class="keyword">static_cast</span>&lt;Char*&gt;(checkedMalloc(allocSize));</span><br><span class="line">  <span class="comment">//调用memcpy</span></span><br><span class="line">  <span class="keyword">if</span> (FBSTRING_LIKELY(size &gt; <span class="number">0</span>)) &#123;</span><br><span class="line">    fbstring_detail::podCopy(data, data + size, ml_.data_);</span><br><span class="line">  &#125;</span><br><span class="line">  ml_.size_ = size;</span><br><span class="line">  <span class="comment">//设置容量及存储类别</span></span><br><span class="line">  ml_.setCapacity(allocSize / <span class="keyword">sizeof</span>(Char) - <span class="number">1</span>, Category::isMedium);</span><br><span class="line">  ml_.data_[size] = <span class="string">'\0'</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>由此可见，中型字符串的内存结构如下所示：</p>
+<p><img src="/images/cpp/fbstring_medium.png" alt=""></p>
+<ul>
+<li>Large</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">FOLLY_MALLOC_NOINLINE</span> <span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:initLarge(</span><br><span class="line">    <span class="keyword">const</span> Char* <span class="keyword">const</span> data,</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> size) &#123;</span><br><span class="line">  <span class="comment">// 大字符串启用COW</span></span><br><span class="line">  <span class="keyword">size_t</span> effectiveCapacity = size;</span><br><span class="line">  <span class="keyword">auto</span> <span class="keyword">const</span> newRC = RefCounted::create(data, &amp;effectiveCapacity);</span><br><span class="line">  ml_.data_ = newRC-&gt;data_;</span><br><span class="line">  ml_.size_ = size;</span><br><span class="line">  ml_.setCapacity(effectiveCapacity, Category::isLarge);</span><br><span class="line">  ml_.data_[size] = <span class="string">'\0'</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">RefCounted</span> &#123;</span></span><br><span class="line">    <span class="comment">//使用atomic存储引用计数，data存在随后的连续内存中，提高内存使用效率</span></span><br><span class="line">    <span class="built_in">std</span>::atomic&lt;<span class="keyword">size_t</span>&gt; refCount_;</span><br><span class="line">    Char data_[<span class="number">1</span>];</span><br><span class="line"></span><br><span class="line">   <span class="function"><span class="keyword">static</span> RefCounted* <span class="title">create</span><span class="params">(<span class="keyword">size_t</span>* size)</span> </span>&#123;</span><br><span class="line">     <span class="comment">//通过goodMallocSize将size对齐，提高内存分配效率</span></span><br><span class="line">      <span class="keyword">const</span> <span class="keyword">size_t</span> allocSize =</span><br><span class="line">          goodMallocSize(getDataOffset() + (*size + <span class="number">1</span>) * <span class="keyword">sizeof</span>(Char));</span><br><span class="line">      <span class="keyword">auto</span> result = <span class="keyword">static_cast</span>&lt;RefCounted*&gt;(checkedMalloc(allocSize));</span><br><span class="line">      result-&gt;refCount_.store(<span class="number">1</span>, <span class="built_in">std</span>::memory_order_release);</span><br><span class="line">      *size = (allocSize - getDataOffset()) / <span class="keyword">sizeof</span>(Char) - <span class="number">1</span>;</span><br><span class="line">      <span class="keyword">return</span> result;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">static</span> RefCounted* <span class="title">create</span><span class="params">(<span class="keyword">const</span> Char* data, <span class="keyword">size_t</span>* size)</span> </span>&#123;</span><br><span class="line">      <span class="keyword">const</span> <span class="keyword">size_t</span> effectiveSize = *size;</span><br><span class="line">      <span class="keyword">auto</span> result = create(size);</span><br><span class="line">      <span class="keyword">if</span> (FBSTRING_LIKELY(effectiveSize &gt; <span class="number">0</span>)) &#123;</span><br><span class="line">        <span class="comment">//调用memcpy</span></span><br><span class="line">        fbstring_detail::podCopy(data, data + effectiveSize, result-&gt;data_);</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> result;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;;</span><br></pre></td></tr></table></figure>
+<p>大型字符串的内存分布同中型字符串基本相同，仅仅多了个引用计数需要存储，如下所示：</p>
+<p><img src="/images/cpp/fbstring_large.png" alt=""></p>
+<p>到此，还有个问题就是字符串的类别是如何存储的，代码如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="keyword">uint8_t</span> category_type;</span><br><span class="line"><span class="keyword">enum</span> <span class="class"><span class="keyword">class</span> <span class="title">Category</span> :</span> category_type &#123;</span><br><span class="line">  isSmall = <span class="number">0</span>,</span><br><span class="line">  isMedium = kIsLittleEndian ? <span class="number">0x80</span> : <span class="number">0x2</span>,</span><br><span class="line">  isLarge = kIsLittleEndian ? <span class="number">0x40</span> : <span class="number">0x1</span>,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">//categoryExtractMask = kIsLittleEndian ? 0xC0 : 0x3;</span></span><br><span class="line"><span class="function">Category <span class="title">category</span><span class="params">()</span> <span class="keyword">const</span> </span>&#123;</span><br><span class="line">    <span class="comment">// works for both big-endian and little-endian</span></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">static_cast</span>&lt;Category&gt;(bytes_[lastChar] &amp; categoryExtractMask);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">MediumLarge</span> &#123;</span></span><br><span class="line">    Char* data_;</span><br><span class="line">    <span class="keyword">size_t</span> size_;</span><br><span class="line">    <span class="keyword">size_t</span> capacity_;</span><br><span class="line"></span><br><span class="line"> <span class="comment">// 小端序情况下，capacityExtractMask = ~(size_t(categoryExtractMask) &lt;&lt; kCategoryShift)</span></span><br><span class="line">    <span class="keyword">size_t</span> capacity() <span class="keyword">const</span> &#123;</span><br><span class="line">      <span class="keyword">return</span> kIsLittleEndian ? capacity_ &amp; capacityExtractMask : capacity_ &gt;&gt; <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="comment">// kCategoryShift = (sizeof(size_t) - 1) * 8;</span></span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">setCapacity</span><span class="params">(<span class="keyword">size_t</span> cap, Category cat)</span> </span>&#123;</span><br><span class="line">      capacity_ = kIsLittleEndian</span><br><span class="line">          ? cap | (<span class="keyword">static_cast</span>&lt;<span class="keyword">size_t</span>&gt;(cat) &lt;&lt; kCategoryShift)</span><br><span class="line">          : (cap &lt;&lt; <span class="number">2</span>) | <span class="keyword">static_cast</span>&lt;<span class="keyword">size_t</span>&gt;(cat);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;;</span><br></pre></td></tr></table></figure>
+<p>由此可见，basic_string栈中最后一个字节的高两位被用来存储字符串类型，在短字符串中，该字节存储的是字符串的size，由于此时size最多为22，所以高两位是不需要的，所以可以用来存类别，而在中大型字符串中，这两位对应于capacity中的最高两位，现有主机的内存没有这么大，所以这高两位也不可能用到，因此可以用来存储字符串类型。由此可见，FBString对内存的利用控制得多精细。</p>
+<h2 id="拷贝"><a href="#拷贝" class="headerlink" title="拷贝"></a>拷贝</h2><p>看完了构造函数，下面来看拷贝构造函数：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">fbstring_core(<span class="keyword">const</span> fbstring_core&amp; rhs) &#123;</span><br><span class="line">  FBSTRING_ASSERT(&amp;rhs != <span class="keyword">this</span>);</span><br><span class="line">  <span class="keyword">switch</span> (rhs.category()) &#123;</span><br><span class="line">    <span class="keyword">case</span> Category::isSmall:</span><br><span class="line">      copySmall(rhs);</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> Category::isMedium:</span><br><span class="line">      copyMedium(rhs);</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> Category::isLarge:</span><br><span class="line">      copyLarge(rhs);</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">      folly::assume_unreachable();</span><br><span class="line">  &#125;</span><br><span class="line">  FBSTRING_ASSERT(size() == rhs.size());</span><br><span class="line">  FBSTRING_ASSERT(<span class="built_in">memcmp</span>(data(), rhs.data(), size() * <span class="keyword">sizeof</span>(Char)) == <span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面来分别看不同尺寸下的拷贝构造函数是如何实现的。</p>
+<ul>
+<li>Small</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:copySmall(<span class="keyword">const</span> fbstring_core&amp; rhs) &#123;</span><br><span class="line">  <span class="keyword">static_assert</span>(offsetof(MediumLarge, data_) == <span class="number">0</span>, <span class="string">"fbstring layout failure"</span>);</span><br><span class="line">  <span class="keyword">static_assert</span>(</span><br><span class="line">      offsetof(MediumLarge, size_) == <span class="keyword">sizeof</span>(ml_.data_),</span><br><span class="line">      <span class="string">"fbstring layout failure"</span>);</span><br><span class="line">  <span class="keyword">static_assert</span>(</span><br><span class="line">      offsetof(MediumLarge, capacity_) == <span class="number">2</span> * <span class="keyword">sizeof</span>(ml_.data_),</span><br><span class="line">      <span class="string">"fbstring layout failure"</span>);</span><br><span class="line">  <span class="comment">// Just write the whole thing, don't look at details. In</span></span><br><span class="line">  <span class="comment">// particular we need to copy capacity anyway because we want</span></span><br><span class="line">  <span class="comment">// to set the size (don't forget that the last character,</span></span><br><span class="line">  <span class="comment">// which stores a short string's length, is shared with the</span></span><br><span class="line">  <span class="comment">// ml_.capacity field).</span></span><br><span class="line">  ml_ = rhs.ml_;</span><br><span class="line">  FBSTRING_ASSERT(</span><br><span class="line">      category() == Category::isSmall &amp;&amp; <span class="keyword">this</span>-&gt;size() == rhs.size());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Medium</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">FOLLY_MALLOC_NOINLINE</span> <span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:copyMedium(</span><br><span class="line">    <span class="keyword">const</span> fbstring_core&amp; rhs) &#123;</span><br><span class="line">  <span class="comment">//中型字符串总是采用eager-copy的方式，即字符串的拷贝总会重新分配内存并拷贝内容</span></span><br><span class="line">  <span class="keyword">auto</span> <span class="keyword">const</span> allocSize = goodMallocSize((<span class="number">1</span> + rhs.ml_.size_) * <span class="keyword">sizeof</span>(Char));</span><br><span class="line">  ml_.data_ = <span class="keyword">static_cast</span>&lt;Char*&gt;(checkedMalloc(allocSize));</span><br><span class="line">  fbstring_detail::podCopy(</span><br><span class="line">      rhs.ml_.data_, rhs.ml_.data_ + rhs.ml_.size_ + <span class="number">1</span>, ml_.data_);</span><br><span class="line">  ml_.size_ = rhs.ml_.size_;</span><br><span class="line">  ml_.setCapacity(allocSize / <span class="keyword">sizeof</span>(Char) - <span class="number">1</span>, Category::isMedium);</span><br><span class="line">  FBSTRING_ASSERT(category() == Category::isMedium);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Large</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">FOLLY_MALLOC_NOINLINE</span> <span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:copyLarge(</span><br><span class="line">    <span class="keyword">const</span> fbstring_core&amp; rhs) &#123;</span><br><span class="line">  <span class="comment">//大型字符串采用COW</span></span><br><span class="line">  ml_ = rhs.ml_;</span><br><span class="line">  RefCounted::incrementRefs(ml_.data_);</span><br><span class="line">  FBSTRING_ASSERT(category() == Category::isLarge &amp;&amp; size() == rhs.size());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面来看字符串的修改是如何实现的，显而易见的是，Large的修改会导致内存的重新分配，Small及Medium字符串由于是采用的<code>eager-copy</code>的方式，修改的时候直接返回对应的内存地址即可，以basic_string为例来看：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//basic_string</span></span><br><span class="line">reference <span class="keyword">operator</span>[](size_type pos) &#123;</span><br><span class="line">  <span class="keyword">return</span> *(begin() + pos);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function">iterator <span class="title">begin</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="comment">//此处store即是fbstring_core</span></span><br><span class="line">  <span class="keyword">return</span> store_.mutableData();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//fbstring_core</span></span><br><span class="line"><span class="function">Char* <span class="title">mutableData</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  <span class="keyword">switch</span> (category()) &#123;</span><br><span class="line">    <span class="keyword">case</span> Category::isSmall:</span><br><span class="line">      <span class="keyword">return</span> small_;</span><br><span class="line">    <span class="keyword">case</span> Category::isMedium:</span><br><span class="line">      <span class="keyword">return</span> ml_.data_;</span><br><span class="line">    <span class="keyword">case</span> Category::isLarge:</span><br><span class="line">      <span class="keyword">return</span> mutableDataLarge();</span><br><span class="line">  &#125;</span><br><span class="line">  folly::assume_unreachable();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">inline</span> <span class="title">Char</span>* <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:mutableDataLarge() &#123;</span><br><span class="line">  FBSTRING_ASSERT(category() == Category::isLarge);</span><br><span class="line">  <span class="keyword">if</span> (RefCounted::refs(ml_.data_) &gt; <span class="number">1</span>) &#123; <span class="comment">//如果无其他字符串引用，则直接返回即可，否则需要重新分配内存</span></span><br><span class="line">    unshare();</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> ml_.data_;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="class"><span class="keyword">class</span> <span class="title">Char</span>&gt;</span></span><br><span class="line"><span class="class"><span class="title">FOLLY_MALLOC_NOINLINE</span> <span class="title">inline</span> <span class="title">void</span> <span class="title">fbstring_core</span>&lt;Char&gt;:</span>:unshare(</span><br><span class="line">    <span class="keyword">size_t</span> minCapacity) &#123;</span><br><span class="line">  FBSTRING_ASSERT(category() == Category::isLarge);</span><br><span class="line">  <span class="keyword">size_t</span> effectiveCapacity = <span class="built_in">std</span>::max(minCapacity, ml_.capacity());</span><br><span class="line">  <span class="comment">//重新分配内存</span></span><br><span class="line">  <span class="keyword">auto</span> <span class="keyword">const</span> newRC = RefCounted::create(&amp;effectiveCapacity);</span><br><span class="line">  FBSTRING_ASSERT(effectiveCapacity &gt;= ml_.capacity());</span><br><span class="line">  <span class="comment">//拷贝数据</span></span><br><span class="line">  fbstring_detail::podCopy(ml_.data_, ml_.data_ + ml_.size_ + <span class="number">1</span>, newRC-&gt;data_);</span><br><span class="line">  RefCounted::decrementRefs(ml_.data_);</span><br><span class="line">  ml_.data_ = newRC-&gt;data_;</span><br><span class="line">  ml_.setCapacity(effectiveCapacity, Category::isLarge);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><ul>
+<li>fbstring在std::string的基础上对于不同尺寸的string采用了不同类型的实现方式，对内存的使用控制非常精细。</li>
+<li>短字符串直接存储在栈中从而避免内存分配</li>
+<li>中型字符串采用了<code>eager copy</code>的实现方式，因为folly鼓励使用jemalloc来替代glibc下默认的ptmalloc，内存使用使用很高效，开辟这样尺寸的内存可以认为是非常高效的</li>
+<li>长字符串则采用了COW的实现，减少内存拷贝</li>
+</ul>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li>[<a href="[https://www.cnblogs.com/promise6522/archive/2012/06/05/2535530.html](https://www.cnblogs.com/promise6522/archive/2012/06/05/2535530.html">漫步Facebook开源C++库folly(1)：string类的设计</a>)</li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/c/" rel="tag"># c++</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/06/08/cpp-string2/" rel="next" title="漫谈C++ string（2）：string_ref的实现">
+                <i class="fa fa-chevron-left"></i> 漫谈C++ string（2）：string_ref的实现
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Leeshine</p>
+              <p class="site-description motion-element" itemprop="description">Stay Hungry, Stay Foolish</p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">17</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">11</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/leeshine" target="_blank" title="Github">
+                      
+                        <i class="fa fa-fw fa-github"></i>Github</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:lvshanchun@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义"><span class="nav-number">1.</span> <span class="nav-text">定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#构造"><span class="nav-number">2.</span> <span class="nav-text">构造</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#拷贝"><span class="nav-number">3.</span> <span class="nav-text">拷贝</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#总结"><span class="nav-number">4.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Leeshine</span>
+
+  
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Muse</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
