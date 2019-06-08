@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="C++,">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="Overview在c++的函数调用中传递字符串引用时非常常见的，但是通常被调函数通常不关心所传参数的实际实际类型，从而可能会发生以下状况：  被调函数以std::string(包括std::string&amp;amp;)作为参数，如果调用者传入的是非std::string的数据类型的话，必然会发生数据拷贝 被调函数以char*及length作为参数，则会降低代码可读性和安全性，同时还无法使用标准库提供的">
+<meta name="keywords" content="C++">
+<meta property="og:type" content="article">
+<meta property="og:title" content="漫谈C++ string（2）：string_ref的实现">
+<meta property="og:url" content="http://yoursite.com/2019/06/08/cpp-string2/index.html">
+<meta property="og:site_name" content="Leesine&#39;s Blog">
+<meta property="og:description" content="Overview在c++的函数调用中传递字符串引用时非常常见的，但是通常被调函数通常不关心所传参数的实际实际类型，从而可能会发生以下状况：  被调函数以std::string(包括std::string&amp;amp;)作为参数，如果调用者传入的是非std::string的数据类型的话，必然会发生数据拷贝 被调函数以char*及length作为参数，则会降低代码可读性和安全性，同时还无法使用标准库提供的">
+<meta property="og:locale" content="default">
+<meta property="og:updated_time" content="2019-06-08T07:10:03.395Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="漫谈C++ string（2）：string_ref的实现">
+<meta name="twitter:description" content="Overview在c++的函数调用中传递字符串引用时非常常见的，但是通常被调函数通常不关心所传参数的实际实际类型，从而可能会发生以下状况：  被调函数以std::string(包括std::string&amp;amp;)作为参数，如果调用者传入的是非std::string的数据类型的话，必然会发生数据拷贝 被调函数以char*及length作为参数，则会降低代码可读性和安全性，同时还无法使用标准库提供的">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/06/08/cpp-string2/">
+
+
+
+
+
+  <title>漫谈C++ string（2）：string_ref的实现 | Leesine's Blog</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope="" itemtype="http://schema.org/WebPage" lang="default">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Leesine's Blog</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Stay Hungry, Stay Foolish</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/06/08/cpp-string2/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">漫谈C++ string（2）：string_ref的实现</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-06-08T15:08:10+08:00">
+                2019-06-08
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h2 id="Overview"><a href="#Overview" class="headerlink" title="Overview"></a>Overview</h2><p>在c++的函数调用中传递字符串引用时非常常见的，但是通常被调函数通常不关心所传参数的实际实际类型，从而可能会发生以下状况：</p>
+<ul>
+<li>被调函数以<code>std::string(包括std::string&amp;)</code>作为参数，如果调用者传入的是非<code>std::string</code>的数据类型的话，必然会发生数据拷贝</li>
+<li>被调函数以<code>char*</code>及<code>length</code>作为参数，则会降低代码可读性和安全性，同时还无法使用标准库提供的一些函数</li>
+<li>被调函数是以模板实现的用以支持各种参数，但这通常会增加代码的复杂度和编译时间</li>
+<li>被调函数之间需要传递字符串的一部分（substr）时，也必然会发生数据拷贝</li>
+</ul>
+<p>来看一个具体的例子：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">std</span>::<span class="function"><span class="built_in">string</span> <span class="title">extract_part</span> <span class="params">( <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span> &amp;bar )</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> bar.substr ( <span class="number">2</span>, <span class="number">3</span> );</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> ( extract_part ( <span class="string">"ABCDEFG"</span> ).front() == <span class="string">'C'</span> ) &#123; <span class="comment">/* do something */</span> &#125;</span><br></pre></td></tr></table></figure></p>
+<p>在上述例子中，一个临时的string变量会被创建出来，然后通过引用传递的方式传入<code>extract_part</code>中，然后第二个临时string变量在调用<code>substr</code>之后会被创建出来，然后返回给调用者的时候也可能会产生数据拷贝（通过<code>RVO</code>可消除）。其实这两个临时变量不是必须要产生的，这说明在以<code>string</code>做为参数传递时经常容易产生不必要的拷贝，特别是对于大字符串来说，避免数据拷贝是很有必要的，但是标准库的<code>COW</code>实现也有问题，参见<a href="https://www.cnblogs.com/promise6522/archive/2012/03/22/2412686.html" target="_blank" rel="noopener">std::string的Copy-on-Write：不如想象中美好</a>,所以很多大型项目或基础库都提供了<code>StringReference</code>的实现，如<code>Boost::StringRef</code>,<code>LLVM的StringRef</code>, <code>Chromium的base::StringPiece</code>等，在c++17中也新增了<code>std::string_view</code>来支持字符串引用。</p>
+<h2 id="Chrome-StringPiece"><a href="#Chrome-StringPiece" class="headerlink" title="Chrome StringPiece"></a>Chrome StringPiece</h2><p>Chrome中的StringPiece实现在<code>string/string_piece.h</code>中，它可以作为函数参数和返回值使用，一个StringPiece参数也可以接受std::string、const char*、常量字符串作为输入，这些输入都不会产生数据拷贝。<br><code>StringPiece</code>的定义如下：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//strings/string_piece_forward.h</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">BasicStringPiece</span>;</span></span><br><span class="line"><span class="keyword">typedef</span> BasicStringPiece&lt;<span class="built_in">std</span>::<span class="built_in">string</span>&gt; StringPiece;</span><br></pre></td></tr></table></figure></p>
+<p>可以看到，<code>StringPiece</code>是BasicStringPiece关于std::string的实现，下面来看BasicStringPiece的实现。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//构造函数</span></span><br><span class="line"><span class="function"><span class="keyword">constexpr</span> <span class="title">BasicStringPiece</span><span class="params">(<span class="keyword">const</span> value_type* str)</span></span></span><br><span class="line">    : ptr_(str), length_(!str ? 0 : CharTraits&lt;value_type&gt;::length(str)) &#123;&#125;</span><br><span class="line">BasicStringPiece(<span class="keyword">const</span> STRING_TYPE&amp; str)</span><br><span class="line">    : ptr_(str.data()), length_(str.size()) &#123;&#125;</span><br><span class="line"><span class="function"><span class="keyword">constexpr</span> <span class="title">BasicStringPiece</span><span class="params">(<span class="keyword">const</span> value_type* offset, size_type len)</span></span></span><br><span class="line">    : ptr_(offset), length_(len) &#123;&#125;</span><br><span class="line">BasicStringPiece(<span class="keyword">const</span> <span class="keyword">typename</span> STRING_TYPE::const_iterator&amp; begin,</span><br><span class="line">                 <span class="keyword">const</span> <span class="keyword">typename</span> STRING_TYPE::const_iterator&amp; end) &#123;&#125;</span><br><span class="line"><span class="comment">//成员变量</span></span><br><span class="line"><span class="keyword">const</span> value_type* ptr_;</span><br><span class="line">size_type length_;</span><br></pre></td></tr></table></figure></p>
+<p>可以看到，它有两个成员变量，分别是指向的数据以及数据的长度，所以它的传递和拷贝值需要拷贝相应的指针，而不需要拷贝指向的数据，这种实现方式也要求调用者要确保指向数据的有效性。如前文所说，它可以接收<code>const char*</code>、<code>const std::string&amp;</code>作为参数。<br>下面来看它的部分成员函数实现，首先是<code>substr</code>:<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">  <span class="comment">// substr.</span></span><br><span class="line">  <span class="function">BasicStringPiece <span class="title">substr</span><span class="params">(size_type pos,</span></span></span><br><span class="line"><span class="function"><span class="params">                          size_type n = BasicStringPiece::npos)</span> <span class="keyword">const</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> internal::substr(*<span class="keyword">this</span>, pos, n);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">//最终调用函数</span></span><br><span class="line">  <span class="keyword">template</span>&lt;<span class="keyword">typename</span> STR&gt;</span><br><span class="line">BasicStringPiece&lt;STR&gt; substrT(<span class="keyword">const</span> BasicStringPiece&lt;STR&gt;&amp; self,</span><br><span class="line">                              <span class="keyword">size_t</span> pos,</span><br><span class="line">                              <span class="keyword">size_t</span> n) &#123;</span><br><span class="line">  <span class="keyword">if</span> (pos &gt; self.size()) pos = self.size();</span><br><span class="line">  <span class="keyword">if</span> (n &gt; self.size() - pos) n = self.size() - pos;</span><br><span class="line">  <span class="keyword">return</span> BasicStringPiece&lt;STR&gt;(self.data() + pos, n);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>BasicStringPiece::substr最终调用的是substrT这个函数，可以看到的是，它不会产生额外的数据拷贝，只会拷贝指向数据的指针。</p>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="[https://izualzhy.cn/string-piece-introduction](https://izualzhy.cn/string-piece-introduction">StringPiece介绍</a>)</li>
+<li><a href="[https://www.boost.org/doc/libs/1_61_0/libs/utility/doc/html/string_ref.html#string_ref.examples](https://www.boost.org/doc/libs/1_61_0/libs/utility/doc/html/string_ref.html#string_ref.examples">boost:StringRef</a>)</li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/06/08/cpp-string1/" rel="next" title="漫谈C++ string（1）：std::string实现">
+                <i class="fa fa-chevron-left"></i> 漫谈C++ string（1）：std::string实现
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Leeshine</p>
+              <p class="site-description motion-element" itemprop="description">Stay Hungry, Stay Foolish</p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">16</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">11</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/leeshine" target="_blank" title="Github">
+                      
+                        <i class="fa fa-fw fa-github"></i>Github</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:lvshanchun@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Overview"><span class="nav-number">1.</span> <span class="nav-text">Overview</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Chrome-StringPiece"><span class="nav-number">2.</span> <span class="nav-text">Chrome StringPiece</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#References"><span class="nav-number">3.</span> <span class="nav-text">References</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Leeshine</span>
+
+  
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Muse</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
