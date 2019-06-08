@@ -88,7 +88,7 @@
 <meta property="og:description" content="从实际使用上来说，std::string跟应该叫做std::string_buffer，因为它的特性更像std::vector而不是std::array，在很多情况下都容易引起数据拷贝。在实际项目中，拷贝std::vector并不是一个好的行为，他们更想要的是copy-on-write string、不可变string、基于引用计数的string等。在实际使用的过程中，std::string的最大">
 <meta property="og:locale" content="default">
 <meta property="og:image" content="http://yoursite.com/images/cpp/string_mem.png">
-<meta property="og:updated_time" content="2019-06-08T07:06:19.219Z">
+<meta property="og:updated_time" content="2019-06-08T07:17:46.503Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="漫谈C++ string（1）：std::string实现">
 <meta name="twitter:description" content="从实际使用上来说，std::string跟应该叫做std::string_buffer，因为它的特性更像std::vector而不是std::array，在很多情况下都容易引起数据拷贝。在实际项目中，拷贝std::vector并不是一个好的行为，他们更想要的是copy-on-write string、不可变string、基于引用计数的string等。在实际使用的过程中，std::string的最大">
@@ -308,7 +308,7 @@
 <li>std::string_view(c++17后才可用)</li>
 <li>不直接传递一个string，而是传递它的迭代器</li>
 </ul>
-<p>本文主要来分析GNU STL中std::string的实现，string_ref的实现可参考（），folly::FBString的实现可参考（）。</p>
+<p>本文主要来分析GNU STL中std::string的实现，string_ref的实现可参考<a href="https://leeshine.github.io/2019/06/08/cpp-string2/" target="_blank" rel="noopener">string_ref的实现</a>，folly::FBString的实现可参考<a href="https://leeshine.github.io/2019/06/08/cpp-string3/" target="_blank" rel="noopener">FBString的实现</a></p>
 <h2 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h2><p>以<code>gcc-stl 4.4.0</code>为例std::string的实现方式，gnu-stl中string的定义如下：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> _CharT, <span class="keyword">typename</span> _Traits = char_traits&lt;_CharT&gt;,</span><br><span class="line">         <span class="keyword">typename</span> _Alloc = allocator&lt;_CharT&gt; &gt;</span><br><span class="line">  class basic_string;</span><br><span class="line"><span class="keyword">typedef</span> basic_string&lt;<span class="keyword">char</span>&gt;    <span class="built_in">string</span>;</span><br></pre></td></tr></table></figure></p>
 <p>可以看到，std::string是basic_string关于char的实现，下面来看basic_string的实现，如下为关于basic_string的部分说明：</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">*  A <span class="built_in">string</span> looks like <span class="keyword">this</span>:</span><br><span class="line">*</span><br><span class="line">*  @code</span><br><span class="line">*                                        [_Rep]</span><br><span class="line">*                                        _M_length <span class="comment">//长度</span></span><br><span class="line">*   [basic_string&lt;char_type&gt;]            _M_capacity <span class="comment">//容量</span></span><br><span class="line">*   _M_dataplus                          _M_refcount <span class="comment">//引用计数，使用了cow</span></span><br><span class="line">*   _M_p ----------------&gt;               unnamed <span class="built_in">array</span> of char_type <span class="comment">//指向实际的数据</span></span><br><span class="line">*  @endcode</span><br></pre></td></tr></table></figure>
@@ -340,8 +340,8 @@
 <li><code>COW</code>能有效减少内存拷贝，但是其实现较为复杂，也存在一些其他问题，具体可参考[<a href="[http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html](http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html">std::string的Copy-on-Write：不如想象中美好</a>)，加上新的标准库中<code>std::move</code>的引入导致<code>COW</code>的这种优化不再有不要，所以从GCC5开始已经废弃了<code>COW</code>机制</li>
 </ul>
 <h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
-<li><a href="[https://blog.csdn.net/ybxuwei/article/details/51326830](https://blog.csdn.net/ybxuwei/article/details/51326830">std::string源码探秘和性能分析</a>)</li>
-<li><a href="[http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html](http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html">深入剖析 linux GCC 4.4 的 STL string</a>)</li>
+<li><a href="https://blog.csdn.net/ybxuwei/article/details/51326830" target="_blank" rel="noopener">std::string源码探秘和性能分析</a></li>
+<li><a href="http://blogs.360.cn/post/linux-gcc-stl-string-in-depth.html" target="_blank" rel="noopener">深入剖析 linux GCC 4.4 的 STL string</a></li>
 </ul>
 
       
