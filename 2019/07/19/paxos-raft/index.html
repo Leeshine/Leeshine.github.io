@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="paxos,raft,">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="本文从共识问题开始讲起，一步步演化出basic paxos，然后分析部分基于paxos的共识算法，包括multi-paxos、raft  共识问题所谓共识问题就是要在多个参与者之间确定一个不可变变量的值，所谓不可变变量就是这个值一旦确定之后就不可再变了。看到这里，大部分人的疑惑就是，我要做的是一个分布式存储系统或者是数据库，你给我确定一个值有什么用呢？其实这里的不可变变量只是实际应用场景的一个抽">
+<meta name="keywords" content="paxos,raft">
+<meta property="og:type" content="article">
+<meta property="og:title" content="共识算法杂谈">
+<meta property="og:url" content="http://yoursite.com/2019/07/19/paxos-raft/index.html">
+<meta property="og:site_name" content="Leesine&#39;s Blog">
+<meta property="og:description" content="本文从共识问题开始讲起，一步步演化出basic paxos，然后分析部分基于paxos的共识算法，包括multi-paxos、raft  共识问题所谓共识问题就是要在多个参与者之间确定一个不可变变量的值，所谓不可变变量就是这个值一旦确定之后就不可再变了。看到这里，大部分人的疑惑就是，我要做的是一个分布式存储系统或者是数据库，你给我确定一个值有什么用呢？其实这里的不可变变量只是实际应用场景的一个抽">
+<meta property="og:locale" content="default">
+<meta property="og:updated_time" content="2019-07-19T12:19:42.798Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="共识算法杂谈">
+<meta name="twitter:description" content="本文从共识问题开始讲起，一步步演化出basic paxos，然后分析部分基于paxos的共识算法，包括multi-paxos、raft  共识问题所谓共识问题就是要在多个参与者之间确定一个不可变变量的值，所谓不可变变量就是这个值一旦确定之后就不可再变了。看到这里，大部分人的疑惑就是，我要做的是一个分布式存储系统或者是数据库，你给我确定一个值有什么用呢？其实这里的不可变变量只是实际应用场景的一个抽">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/07/19/paxos-raft/">
+
+
+
+
+
+  <title>共识算法杂谈 | Leesine's Blog</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope="" itemtype="http://schema.org/WebPage" lang="default">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Leesine's Blog</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Stay Hungry, Stay Foolish</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/07/19/paxos-raft/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">共识算法杂谈</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-07-19T20:17:04+08:00">
+                2019-07-19
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <blockquote>
+<p>本文从共识问题开始讲起，一步步演化出<code>basic paxos</code>，然后分析部分基于paxos的共识算法，包括<code>multi-paxos</code>、<code>raft</code></p>
+</blockquote>
+<h2 id="共识问题"><a href="#共识问题" class="headerlink" title="共识问题"></a>共识问题</h2><p>所谓共识问题就是要在多个参与者之间确定一个不可变变量的值，所谓不可变变量就是这个值一旦确定之后就不可再变了。看到这里，大部分人的疑惑就是，我要做的是一个分布式存储系统或者是数据库，你给我确定一个值有什么用呢？其实这里的不可变变量只是实际应用场景的一个抽象，在日常中通常是要配合状态机进行使用的，所谓状态机就是对于一系列相同的输入，它的最终输出结果总是一样的。所以我们可以用这个不可变变量作为多个状态机的输入，来确保所有状态机下的输出结果是一致的。例如对于一个存储系统来说，这个不可变变量可以是一条日志记录，一条日志记录确定以后，它是永远不会再变的，之后通过在多个数据副本上应用这条日志记录就可以确保副本之间保持一致。</p>
+<h2 id="basic-paxos演进"><a href="#basic-paxos演进" class="headerlink" title="basic paxos演进"></a><code>basic paxos</code>演进</h2><p>通常我们说的paxos算法是指<code>basic paxos</code>，它是共识领域里最经典的算法，本文不讲它的证明，而是从实际应用角度来看它是如何一步步演进而来的。<br>首先，paxos要解决的是如何设计有一个系统来确定一个不可变变量的值（var），同时它应满足如下特性：</p>
+<ul>
+<li>系统需要满足正确性，一旦某个提案被选定后，var的值就不可再变了</li>
+<li>系统需要具有容错性</li>
+</ul>
+<p>在paxos算法中，主要有两类角色，分别是proposer和acceptor，其中proposer负责生成提案，acceptor负责对提案进行投票，两类角色是可以重合的。为了演进出最终的解决方案，我们可以先将问题简化，先生存简单方案，一步步改进直至演化成最终的方案。</p>
+<h3 id="方案1"><a href="#方案1" class="headerlink" title="方案1"></a>方案1</h3><p>首先假设系统中只有一个acceptor和多个proposer，在这种情况下，最有效的方式就是加锁，即proposer在生成提案之前，首先需要向acceptor取申请锁，谁先获得锁就获得提案权，所以最终只有一个proposer会获得提案权，这样就可以确保系统的正确性，因为acceptor只会收到一个提案，这个提案会最终被选定。此时方案一就类似一个两阶段提交协议，它的整体流程如下：</p>
+<ul>
+<li>proposer向acceptor申请锁，acceptor若还未发放锁，则将锁发放给请求锁的proposer</li>
+<li>proposer获取到锁之后便可发起提案，acceptor则会通过该提案</li>
+</ul>
+<p>但是这种方式又一个问题就是容错性很低，acceptor异常退出或者抢到锁的proposer在发出提案之前异常退出都会导致这个系统的不可用，下面来看改进方案2。</p>
+<h3 id="方案2"><a href="#方案2" class="headerlink" title="方案2"></a>方案2</h3><p>方案1中假设一个acceptor在抢到锁后还没来得及发出提案就异常退出了，此时整个系统就不可用了，为了解决这个问题，这里的锁可以变为抢占式的锁，即acceptor可以向多个proposer发放锁，只有最新的锁才是有效的。所以此时需要给每个锁赋予一个唯一性id来标记锁的新旧程度，这就是paxos中<code>proposal number</code>的意义，<code>proposal number</code>越大，锁就越新。这样当一个proposer异常退出之后，其他的proposer仍旧可以获得提案权。当一个proposer获得锁之后就可以发送提案给acceptor，如果此时没有发放更新的锁，那么该提案就可以被选定，如果已经发放了更新的锁，该提案就会被拒绝。该方案的整体流程如下：</p>
+<ul>
+<li>proposer向acceptor申请锁，acceptor若还未选定提案，则总是发放锁该proposer，同时记录下当前最新的锁序号</li>
+<li>proposer获取到锁后，需要生成提案发送给acceptor，同时提案总要带上自身的锁序号</li>
+<li>acceptor收到提案之后，若该提案对应的锁是最新的，则选定该提案，否则拒绝</li>
+</ul>
+<h3 id="方案3"><a href="#方案3" class="headerlink" title="方案3"></a>方案3</h3><p>上述方案还有一个明显问题就是acceptor挂掉后整个系统就不可用了，所以在这个方案基础之上我们需要引入多个acceptor，此时仍旧采用可抢占式锁方案，这也是<code>basic paxos</code>的基本流程：</p>
+<ul>
+<li>proposer在提案之前需要先从acceptor处申请锁，只有获取到半数有以上acceptor发放的锁后才能发起提案</li>
+<li>在接收到获取锁的请求后，如果acceptor还未同意提案，则将锁发放给proposer，同时记录下自身当前最新的锁，若已经同意提案，咋需要将提案及对应的锁编号返回给proposer</li>
+<li>在获取到半数以上aceptor发放的锁之后，proposer才可以发起提案。若有acceptor已经同意了提案，则acceptor需要从中选出编号最大的提案作为自身的提案发送给acceptor，否则的话可以生成新的提案</li>
+<li>一个acceptor收到提案之后，若该提案对应的锁对于自身来说值最新的，则同意该提案</li>
+<li>一个提案被半数以上acceptor同意后就表示该提案已经被选定了</li>
+</ul>
+<p>上面就是<code>basic paxos</code>的整体流程，大部分描述中，<code>proposal number</code>即是对应上文的锁编号，大部分资料描述中都是proposer自己生成<code>proposal number</code>，proposer需要带上<code>proposal number</code>去请求acceptor，这种描述的整体流程和效果也是一样的。另外proposer采用当前最大编号的提案作为自身提案的原因如下：</p>
+<ul>
+<li>为了确保paxos的正确性，即提案被选定后就不能修改了，因为一个提案被选定后一定会被某些acceptor返回给proposer，proposer采用该提案作为自身的提案值就可确保最终的提案值不会被修改了</li>
+</ul>
+<p>以上就是<code>basic paxos</code>的基本流程，在实际使用过程中通常proposer和acceptor两种角色都是会重合的，同时也可能会增加learner的角色来学习提案，用它来分担读请求压力。另外上述<code>basic paxos</code>在实际使用过程中可能存在一个活性的问题(liveness)，即有可能无法选出最终提案或花费较长时间才选出，因为锁是抢占式的，所以可能存在一个proposer还来不及生成提案锁又被抢走了，循环反复下系统一直处以抢锁状态而无法生成提案，所以在实际过程中一般会先选定一个<code>proposer leader</code>,只有该leader拥有提案权，这样可能有效解决这个问题，同时降低网络流量。</p>
+<h2 id="multi-paxos"><a href="#multi-paxos" class="headerlink" title="multi-paxos"></a>multi-paxos</h2><p>前文说到，<code>basic paxos</code>是用来确定一个变量，而<code>multi-paxos</code>则是就一批提案达成一致，这也是日常应用中使用的paxos。最简单粗暴的方法就是对于每个提案都运行<code>basic paxos</code>的完整流程，先抢锁然后再生成提案，这样显然效率不是很高。所以日常使用的<code>multi-paxos</code>在<code>basic paxos</code>基础上做了如下优化：</p>
+<ul>
+<li>选取一个<code>proposer leader</code>，只有该leader具有生产提案的权利，通过<code>basic paxos</code>的抢锁流程即可选出leader</li>
+<li>leader是有任期的，leader需要跟系统中的其他角色保持心跳联系来维持自身的任期</li>
+<li>在一个leader的任期内，它可以直接跳过抢锁阶段，直接生成提案，这样能减少网络交互，提高效率</li>
+</ul>
+<h3 id="实际应用"><a href="#实际应用" class="headerlink" title="实际应用"></a>实际应用</h3><ul>
+<li><p>x-paxos: X-Paxos是X-DB中的Multi-Paxos实现，<a href="https://mp.weixin.qq.com/s?__biz=MjM5MDE0Mjc4MA==&amp;mid=2650997287&amp;idx=1&amp;sn=4b3ef76bb90c2e28e259802866dc934e&amp;chksm=bdbefa748ac97362184c485dd93ef821c82662f4d64359f0ba9d3cfbb387a593186d947c7dee&amp;scene=0&amp;key=d3935a5e90e39d9987fe240afa271d26503fbe790939c18bcee015" target="_blank" rel="noopener">阿里如何实现高性能分布式强一致的独立 Paxos 基础库</a></p>
+</li>
+<li><p>PaxosStore: 微信自研分布式存储系统，<a href="https://github.com/tencent/paxosstore" target="_blank" rel="noopener">PaxosStore</a></p>
+</li>
+<li><p>Phxpaxos: 微信自研paxos协议库, <a href="https://github.com/Tencent/phxpaxos" target="_blank" rel="noopener">PhxPaxos</a></p>
+</li>
+<li><p>Ceph-Monitor: ceph元数据服务，针对ceph的使用场景做了定制化实现，具体可参考<a href="https://leeshine.github.io/2019/07/19/ceph-monx-paxos/" target="_blank" rel="noopener">ceph-mon paxos实现</a></p>
+</li>
+</ul>
+<h2 id="raft"><a href="#raft" class="headerlink" title="raft"></a>raft</h2><h3 id="基本问题"><a href="#基本问题" class="headerlink" title="基本问题"></a>基本问题</h3><p>原始的paxos较难理解同时更多的是停留在理论证明层面，而raft就是以paxos为基础，提出的更加具体、更易懂、更加工程化的一种共识算法。它将paxos拆分成以下三个子问题：</p>
+<ul>
+<li>选主</li>
+<li>日志复制</li>
+<li>安全性</li>
+</ul>
+<h4 id="选主"><a href="#选主" class="headerlink" title="选主"></a>选主</h4><p>raft限制一个时刻只有一个节点可以发起提案，这样能极大简化算法的实现，这个节点就是leader节点。因为raft需要解决的第一个问题就是：</p>
+<ul>
+<li>如何保证一个时刻最多只有一个leader节点</li>
+<li>在一个leader节点异常后如何尽快选出新的leader</li>
+</ul>
+<p>在raft协议中，存在三种角色，分别是<code>leader</code>,<code>follower</code>,<code>candidate</code>，状态转换图如下所示：</p>
+<p>整体流程如下：</p>
+<ul>
+<li>所有节点以follower角色启动</li>
+<li>leader周期性发送心跳给所有follower</li>
+<li>在超时时间内未收到心跳包的follower会变为candidate，将自身term增加1，然后发起选主</li>
+<li>选举结束：<ul>
+<li>若收到大多数节点的投票，则该candidate变成leader，并向其他节点发送一个空的AppendEntry请求</li>
+<li>若收到相同或更大term的AppendEntry请求，则承认对方为leader，自身变成follower</li>
+<li>若超时则重新选主</li>
+</ul>
+</li>
+</ul>
+<p>这里的term及对应paxos中的<code>proposal number</code>，一个term最多只有一个leader与之对应。其中follower节点对于选主的投票规则是对方的日志比自身新，确保最后选出的leader拥有最新最全的日志，从容简化之后的恢复流程，这部分会在第三个子问题中详细阐述。</p>
+<h4 id="日志复制"><a href="#日志复制" class="headerlink" title="日志复制"></a>日志复制</h4><p>日志复制是为了保证节点的一致性，所有的日志都是先提交到leader节点，再由leader节点follower节点，正常情况下follower节点跟leader节点是一致的，但是在发生节点加入或者leader重新选举之后，follower节点可能落后较多，日志复制需要保证节点的一致性。</p>
+<p>raft为了算法实现，要确保日志是连续的，即节点的日志序列不能存在空洞，它的日志复制示意图如下所示：</p>
+<p>整体流程如下：</p>
+<ul>
+<li>leader接收client的请求，先将日志写入本地，之后向所有follower发送AppendEntry请求</li>
+<li>follower对收到的Entry验证，若该entry对应的前一个位置上，follower对应的日志和leader对应的日志term是相同的，则写入该Entry并返回成功</li>
+<li>若对应的term不相等或者是folloer的日志落后，则拒绝该请求，同时回复自身的日之前情况，leader接收到后会发送缺失部分的日志</li>
+<li>leader在收到半数节点的成功应答后，则认为该日志已经被选定（commit），可以回复成功给客户端</li>
+<li>后续的AppendEntry和HeartBeat请求中都会带上leader的commit信息，follower便可以更新自身的commit信息</li>
+</ul>
+<p>利用日志连续这个特性可以大大简化raft的整体恢复、选主、应用流程，通过以上日志复制机制可以确保如果两个节点相同位置上的日志项的term是相等的，那么该条日志就一定是相等的（因为一个term只会有一个leader），而该日志是相等的，则可以确认前面所有的日志都是相等的（在AppendEntry前会先比较前一条日志是否相等）。</p>
+<h3 id="部分疑问"><a href="#部分疑问" class="headerlink" title="部分疑问"></a>部分疑问</h3><h4 id="提交日志回复"><a href="#提交日志回复" class="headerlink" title="提交日志回复"></a>提交日志回复</h4><p>最初看论文时，我产生过这样的疑问，就是一个client在想leader节点提交日志之后，该leader节点挂掉了，那么client节点最后会收到什么回复呢？如果回复是超时的话，那么客户端是否需要重试后者怎样才能获取到提交结果呢？如果回复是失败的话，如果该leader节点之后又恢复了，那么此条日志也是有可能会commit的，这样显然也不不行的。<br>其实这个问题根分布式系统的原则有关，如果server端返回的timeout，那么结果就是不确定的，系统设计者对使用者的期望就是retry，同时系统设计者或者使用者需要确保这种retry操作是幂等的。其次，对于raft来说，如果一个日志在提交时失败了，那么只能给你返回timeout。这是因为，即使只有少数派node接受了这条日志，这条日志还是有可能被后续的选举出来的leader分发给其他的node，从而变成多数派，然后提交。当然也有可能不包含这条日志的node被选为leader，导致这条日志被truncate掉，从而从系统中消失掉。综合以上两种情况，只能给你返回timeout来代表undefined。<br>最后，raft返回给你成功就是达成了多数派；返回给你失败时就是拒绝你提交，但是这种失败一般不代表日志commit失败，而是因为当前node不是leader或者当前node只读等原因拒绝你；如果返给你timeout，那么结果就是undefined，需要你去查询leader或者干脆重试，而重试的话要求你的操作在你的应用中是幂等的</p>
+<h3 id="工程优化"><a href="#工程优化" class="headerlink" title="工程优化"></a>工程优化</h3><ul>
+<li>预选举：candidate每次在发起选举的时候都会提升自己的term，如果某些candidate因为日志原因肯定无法成为leader，但是它却不断参与选举导致系统的term增加，使真正能当选的candidate要花费一段时间将自身的term跟上之后才能选出leader，容易导致选举周期过长。所以在实际实现过程中，可以增加pre-vote阶段，先发去预投票而不增加自身的term，只有确认可以当选为leader后才会增加自身的term</li>
+<li>乱序提交：raft为了简单性，采用了高度串行化设计，在实际使用中可能会存在性能问题，因此PolarFS因为实现了ParallelRaft，即raft的乱序提交版本。简单来说，就是对于无冲突的log之间可以乱序提交，而由冲突的log之间则需要顺序提交，然后在选主阶段引入额外的流程来填补leader中的log空洞，具体可参考<a href="https://zhuanlan.zhihu.com/p/37384078" target="_blank" rel="noopener">PolarFS</a></li>
+</ul>
+<h3 id="一致性达成"><a href="#一致性达成" class="headerlink" title="一致性达成"></a>一致性达成</h3><p>在讨论分布式系统的时候，很容易混淆共识算法和一致性这两个概念，或者混为一谈，认为paxos和raft是一种强一致性算法，这其实是错误的。raft和paxos只是一种共识算法，共识达成之后如何达到所要求的一致性（线性一致、最终一致等），仍需要其他的实现手段，具体可参考<a href="https://pingcap.com/blog-cn/linearizability-and-raft/" target="_blank" rel="noopener">线性一致性和 Raft</a></p>
+<h4 id="安全性"><a href="#安全性" class="headerlink" title="安全性"></a>安全性</h4><p>所谓安全性就是在前两个问题的基础之上如何确保日志不会丢失，以下是它的具体方案：</p>
+<ul>
+<li>为了简化数据同步和恢复流程，raft中的日志总是从leader流向follower节点的，所以选出来的leader一定要确人是拥有最多以选定日志的节点，这样才不会造成日志的丢失。因此follower向candidate的投票原则是：candidate的最后一条日志的term比follower大，或者在term一样大的情况下，candidate的日志更长，这样就可以确保最终选择的leader包含了大多数节点的日志</li>
+<li>此外论文中还描述了一种情况是一条日志被commit之后又被否定了，其核心原因是根据多数派判断当前日志是否可以commit只适用于当前term，所以一个leader在当选之后会提交一个空的AppendEntry，通过日志的连续性来确保提交该日志的同时也提交之前任期的日志</li>
+</ul>
+<h3 id="与paxos的对比"><a href="#与paxos的对比" class="headerlink" title="与paxos的对比"></a>与paxos的对比</h3><p>这里说的paxos是指multi-paxos，raft比paxos更容易理解和实现，可以视为paxos的加强限制版，它也paxos的主要区别是：</p>
+<ul>
+<li>raft强化了leader的地位，leader一定是拥有最全的日志，日志只会从leader流向follower</li>
+<li>raft节点中日志是连续的，日志之间是不会存在空洞的</li>
+</ul>
+<p>multi-paxos中可以不存在leader，这样的话就退化成了经典的<code>basic paxos</code>实现，raft正是通过这两个限制来简化paxos的工程实现。而paxos和raft都是一旦一个entry（raft叫日志，paxos叫提案）被多数派同意，该提案计算被选定了，被选定的提案就不会丢失也不会更改。事实上，paxos和raft都是用一个唯一性id来标识leader的合法性（proposal-number和term），id最大的leader才是有效的leader，对于paxos和raft来说，同一时刻是可能存在两个leader的，但只有一个是合法的，即同一个term期间只会有一个leader。</p>
+<p>此外，raft中强调了leader拥有最新的日志，而multi-paxos没有强调这点，所以在paxos中一个节点当选为leader之后需要额外的流程从其它acceptor处来补全自身的日志，而raft的恢复流程则简单得多，日志只会从leader流向follower。此外需要注意的是，leader此时恢复的日志可能还不是已经选定的日志，所以paxos和raft中，leader节点在当选之后都需要重新走一遍流程来提交自身的日志。</p>
+<p>raft还有一个很重要的点就是日志的连续性保证，所谓连续性就是说不同节点上相同位置的日志只要他们的term是相同的，这两条日志就一定是相同的，且它们之前的日志也都是相同的，这是通过前文所述的日志复制策略来保证的。这样leader只需对比下follower的日志id和term就知道该节点的日志情况，这样能极大简化日志恢复、选主过程。</p>
+<p>从根本上来说，raft更加易懂、易实现，而paxos侧重于理论描述，两种协议之间不存在绝对的优劣。但是只要有leader角色的存在，选主就一定需要花费一点时间，而paxos中没有强调leader的存在，所以对于极端可用性要求的场景，可以选用paxos。存在此外有资料说raft要求日志是连续的这点会导致系统在网络环境较差的环境里性能较差，个人认为不是这样的，除非是这个环境里慢节点是会不断变化的，才会带来raft性能的明显下降。但是这里也跟具体的日志存储实现有关，当有大量并发写请求执行时，要求所有的日志写入是按顺序写入，那么处于尾部的请求，必须等待之前所有的请求都被处理后才能被提交和返回，这个对性能也是会有影响的。此外，在并发较大的场景下，日志请求的到达可能是乱序的，这对于写入也会造成一定影响。</p>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li>知行学社：paxos和分布式系统</li>
+<li><a href="https://www.zhihu.com/question/36648084" target="_blank" rel="noopener">知乎:raft算法与paxos算法相比有什么优势:朱一聪</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/44874330" target="_blank" rel="noopener">阿里云PolarDB及其存储PolarFS技术实现分析</a></li>
+<li><a href="https://pingcap.com/blog-cn/linearizability-and-raft/" target="_blank" rel="noopener">线性一致性和 Raft</a></li>
+<li><a href="https://leeshine.github.io/2019/07/19/ceph-monx-paxos/" target="_blank" rel="noopener">ceph-mon paxos实现</a></li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/07/19/ceph-monx-paxos/" rel="next" title="ceph-mon paxos实现">
+                <i class="fa fa-chevron-left"></i> ceph-mon paxos实现
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Leeshine</p>
+              <p class="site-description motion-element" itemprop="description">Stay Hungry, Stay Foolish</p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">19</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">13</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/leeshine" target="_blank" title="Github">
+                      
+                        <i class="fa fa-fw fa-github"></i>Github</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:lvshanchun@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#共识问题"><span class="nav-number">1.</span> <span class="nav-text">共识问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#basic-paxos演进"><span class="nav-number">2.</span> <span class="nav-text">basic paxos演进</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#方案1"><span class="nav-number">2.1.</span> <span class="nav-text">方案1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#方案2"><span class="nav-number">2.2.</span> <span class="nav-text">方案2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#方案3"><span class="nav-number">2.3.</span> <span class="nav-text">方案3</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#multi-paxos"><span class="nav-number">3.</span> <span class="nav-text">multi-paxos</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#实际应用"><span class="nav-number">3.1.</span> <span class="nav-text">实际应用</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#raft"><span class="nav-number">4.</span> <span class="nav-text">raft</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#基本问题"><span class="nav-number">4.1.</span> <span class="nav-text">基本问题</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#选主"><span class="nav-number">4.1.1.</span> <span class="nav-text">选主</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#日志复制"><span class="nav-number">4.1.2.</span> <span class="nav-text">日志复制</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#部分疑问"><span class="nav-number">4.2.</span> <span class="nav-text">部分疑问</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#提交日志回复"><span class="nav-number">4.2.1.</span> <span class="nav-text">提交日志回复</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#工程优化"><span class="nav-number">4.3.</span> <span class="nav-text">工程优化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#一致性达成"><span class="nav-number">4.4.</span> <span class="nav-text">一致性达成</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#安全性"><span class="nav-number">4.4.1.</span> <span class="nav-text">安全性</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#与paxos的对比"><span class="nav-number">4.5.</span> <span class="nav-text">与paxos的对比</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Leeshine</span>
+
+  
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Muse</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
