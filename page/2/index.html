@@ -233,6 +233,129 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/01/24/leveldb-put-get/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2019/01/24/leveldb-put-get/" itemprop="url">LevelDB之读写流程</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-01-24T21:30:21+08:00">
+                2019-01-24
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h2 id="PUT"><a href="#PUT" class="headerlink" title="PUT"></a>PUT</h2><p>LevelDB的写入性能较高，整体步骤就是先写wal日志再写入memtable中，由于wal日志是append写入的，性能较高，所以写入一般不存在瓶颈。但是如果写入速度过快，导致memtable来不及flush或者lelvel 0中的文件数较多时，系统的写入可能会被限制，这就是LevelDB的write stall问题，整体写入流程如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">DBImpl</span>:</span>:Writer &#123;</span><br><span class="line">  Status status; <span class="comment">// 写入结果</span></span><br><span class="line">  WriteBatch* batch; </span><br><span class="line">  <span class="keyword">bool</span> sync; <span class="comment">//本次写入对应的log是否立刻刷盘</span></span><br><span class="line">  <span class="keyword">bool</span> done; <span class="comment">//本次写入是否完成</span></span><br><span class="line">  port::CondVar cv; <span class="comment">//条件锁，会被之前的写入线程唤醒</span></span><br><span class="line"></span><br><span class="line">  explicit Writer(port::Mutex* mu) : cv(mu) &#123; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">Status DBImpl::Write(<span class="keyword">const</span> WriteOptions&amp; options, WriteBatch* my_batch) &#123;</span><br><span class="line">  <span class="function">Writer <span class="title">w</span><span class="params">(&amp;mutex_)</span></span>;</span><br><span class="line">  </span><br><span class="line">  <span class="comment">//先加锁，保证只有一个线程能写入，在开始写log和memtable的时候会释放</span></span><br><span class="line">  <span class="function">MutexLock <span class="title">l</span><span class="params">(&amp;mutex_)</span></span>;</span><br><span class="line">  <span class="comment">//加入等待队列中排队</span></span><br><span class="line">  writers_.push_back(&amp;w);</span><br><span class="line">  <span class="comment">//如果此次写入没有被执行且不处于队列头部，则等待之前的写入完成</span></span><br><span class="line">  <span class="keyword">while</span> (!w.done &amp;&amp; &amp;w != writers_.front()) &#123;</span><br><span class="line">    w.cv.Wait();</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">//如果此次写入已经执行了，则直接返回</span></span><br><span class="line">  <span class="comment">//其他写入请求在写入时可能会将队列中的写入请求一起取出合并写入DB中</span></span><br><span class="line">  <span class="keyword">if</span> (w.done) &#123;</span><br><span class="line">    <span class="keyword">return</span> w.status;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">//写入前的检查，memtable、wal日志、compaction等，可能会阻塞住此次写入</span></span><br><span class="line">  Status status = MakeRoomForWrite(my_batch == <span class="literal">NULL</span>);</span><br><span class="line">  <span class="keyword">uint64_t</span> last_sequence = versions_-&gt;LastSequence();</span><br><span class="line">  Writer* last_writer = &amp;w;</span><br><span class="line">  <span class="keyword">if</span> (status.ok() &amp;&amp; my_batch != <span class="literal">NULL</span>) &#123;</span><br><span class="line">    <span class="comment">//合并队列里的多个写入</span></span><br><span class="line">    WriteBatch* updates = BuildBatchGroup(&amp;last_writer);</span><br><span class="line">    WriteBatchInternal::SetSequence(updates, last_sequence + <span class="number">1</span>);</span><br><span class="line">    last_sequence += WriteBatchInternal::Count(updates);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 写入wal日志和memtable，写入前可以先释放锁，让后续write请求进入队列中排队，</span></span><br><span class="line">    <span class="comment">//这样也能保证写入时互斥的，因为此时已经确定是只有w来负责写入 ，这样可以减小互斥时间</span></span><br><span class="line">    &#123;</span><br><span class="line">      mutex_.Unlock();</span><br><span class="line">      status = log_-&gt;AddRecord(WriteBatchInternal::Contents(updates));</span><br><span class="line">      <span class="keyword">bool</span> sync_error = <span class="literal">false</span>;</span><br><span class="line">      <span class="keyword">if</span> (status.ok() &amp;&amp; options.sync) &#123;</span><br><span class="line">        status = logfile_-&gt;Sync();</span><br><span class="line">        <span class="keyword">if</span> (!status.ok()) &#123;</span><br><span class="line">          sync_error = <span class="literal">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">if</span> (status.ok()) &#123;</span><br><span class="line">        status = WriteBatchInternal::InsertInto(updates, mem_);</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="comment">//更新versions时需要加锁，确保last_sequence正确修改</span></span><br><span class="line">      mutex_.Lock();</span><br><span class="line">      <span class="keyword">if</span> (sync_error) &#123;</span><br><span class="line">        <span class="comment">//wal日志sync失败</span></span><br><span class="line">        RecordBackgroundError(status);</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (updates == tmp_batch_) tmp_batch_-&gt;Clear();</span><br><span class="line"></span><br><span class="line">    versions_-&gt;SetLastSequence(last_sequence);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">//修改合并写入请求的状态</span></span><br><span class="line">  <span class="keyword">while</span> (<span class="literal">true</span>) &#123;</span><br><span class="line">    Writer* ready = writers_.front();</span><br><span class="line">    writers_.pop_front();</span><br><span class="line">    <span class="keyword">if</span> (ready != &amp;w) &#123;</span><br><span class="line">      ready-&gt;status = status;</span><br><span class="line">      ready-&gt;done = <span class="literal">true</span>;</span><br><span class="line">      ready-&gt;cv.Signal();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (ready == last_writer) <span class="keyword">break</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 唤醒队列头部的请求</span></span><br><span class="line">  <span class="keyword">if</span> (!writers_.empty()) &#123;</span><br><span class="line">    writers_.front()-&gt;cv.Signal();</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> status;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="GET"><a href="#GET" class="headerlink" title="GET"></a>GET</h2><p>LevelDB支持获取，某个key的指定版本对应的值，如果没有指定版本的话，则获取最新的kv对，整体流程如下：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br></pre></td><td class="code"><pre><span class="line">Status DBImpl::Get(<span class="keyword">const</span> ReadOptions&amp; options,</span><br><span class="line">                   <span class="keyword">const</span> Slice&amp; key,</span><br><span class="line">                   <span class="built_in">std</span>::<span class="built_in">string</span>* value) &#123;</span><br><span class="line">  Status s;</span><br><span class="line">  <span class="comment">//获取快照和version时先加锁，保证相关引用的正确修改</span></span><br><span class="line">  <span class="function">MutexLock <span class="title">l</span><span class="params">(&amp;mutex_)</span></span>;</span><br><span class="line">  SequenceNumber snapshot;</span><br><span class="line">  <span class="comment">//获取相关sequenceNUmber</span></span><br><span class="line">  <span class="keyword">if</span> (options.snapshot != <span class="literal">NULL</span>) &#123;</span><br><span class="line">    snapshot = <span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">const</span> SnapshotImpl*&gt;(options.snapshot)-&gt;number_;</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    snapshot = versions_-&gt;LastSequence();</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  MemTable* mem = mem_;</span><br><span class="line">  MemTable* imm = imm_;</span><br><span class="line">  Version* current = versions_-&gt;current();</span><br><span class="line">  <span class="comment">//memtable引用加1</span></span><br><span class="line">  mem-&gt;Ref();</span><br><span class="line">  <span class="keyword">if</span> (imm != <span class="literal">NULL</span>) imm-&gt;Ref();</span><br><span class="line">  <span class="comment">//version引用加1</span></span><br><span class="line">  current-&gt;Ref();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">bool</span> have_stat_update = <span class="literal">false</span>;</span><br><span class="line">  Version::GetStats stats;</span><br><span class="line"></span><br><span class="line">  <span class="comment">//ref已经设置完成，可以释放锁了</span></span><br><span class="line">  &#123;</span><br><span class="line">    mutex_.Unlock();</span><br><span class="line">    <span class="comment">// 在memtable中查找</span></span><br><span class="line">    <span class="function">LookupKey <span class="title">lkey</span><span class="params">(key, snapshot)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (mem-&gt;Get(lkey, value, &amp;s)) &#123;</span><br><span class="line">      <span class="comment">// 在imm中查找</span></span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (imm != <span class="literal">NULL</span> &amp;&amp; imm-&gt;Get(lkey, value, &amp;s)) &#123;</span><br><span class="line">      <span class="comment">// Done</span></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">//通过version查找，一个version代表DB中sstable文件的一个状态</span></span><br><span class="line">      s = current-&gt;Get(options, lkey, value, &amp;stats);</span><br><span class="line">      have_stat_update = <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//确保只有一个线程修改引用</span></span><br><span class="line">    mutex_.Lock();</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (have_stat_update &amp;&amp; current-&gt;UpdateStats(stats)) &#123;</span><br><span class="line">    <span class="comment">//如果扫描次数过多可能会触发compaction</span></span><br><span class="line">    MaybeScheduleCompaction();</span><br><span class="line">  &#125;</span><br><span class="line">  mem-&gt;Unref();</span><br><span class="line">  <span class="keyword">if</span> (imm != <span class="literal">NULL</span>) imm-&gt;Unref();</span><br><span class="line">  current-&gt;Unref();</span><br><span class="line">  <span class="keyword">return</span> s;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>其中要注意的是，要通过锁来确保只有一个线程来修改相关的引用计数，修改完引用后可以释放锁，即读取memtable和sstable不是互斥的。</p>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/01/24/leveldb-compaction/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -1613,7 +1736,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">17</span>
+                  <span class="site-state-item-count">18</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>
@@ -1626,7 +1749,7 @@
               
               <div class="site-state-item site-state-tags">
                 
-                  <span class="site-state-item-count">11</span>
+                  <span class="site-state-item-count">12</span>
                   <span class="site-state-item-name">tags</span>
                 
               </div>
