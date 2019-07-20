@@ -243,6 +243,163 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/07/20/ext4-introduction/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Leeshine">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Leesine's Blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2019/07/20/ext4-introduction/" itemprop="url">EXT4文件系统简介</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-07-20T11:32:06+08:00">
+                2019-07-20
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h2 id="Minix"><a href="#Minix" class="headerlink" title="Minix"></a>Minix</h2><p>Linux内核在最早发现的时候并没有实现自己的文件系统，而是直接引入了Minix中的文件系统，它的主要结构如下：</p>
+<ul>
+<li>一个<code>boot sector</code>位于磁盘的第一个扇区内，里面存储的是Minix系统的启动信息和分区表</li>
+<li>每个分区的第一个block中存储的是<code>superblock</code>，里面记录了磁盘上其他分区的结构和对应物理磁盘上的位置</li>
+<li><code>inode bitmap</code>：里面记录了inode的使用情况</li>
+<li>inode信息：一个inode对应一个文件，inode中记录了文件的元数据</li>
+<li><code>zone bitmap</code>：记录磁盘块的使用情况</li>
+<li><code>data zone</code>：实际存储文件数据的地方<br>其中，inode存储的是文件的元数据，包括文件大小、文件所属、修改时间等，但是inode中并没有存储文件名。inode中同时存储了文件所占用的block位置，在Minix和EXT1~3文件系统里，inode中是包含9个直接指针、7个1级指针、2个2级指针用以指向对应的data block</li>
+</ul>
+<h2 id="EXT"><a href="#EXT" class="headerlink" title="EXT"></a>EXT</h2><p>最初的EXT文件系统是为了克服Minix文件系统的大小限制而开发的，它是基于Unix文件系统而来，但是目前能获取的关于EXT文件系统的信息较少，因为它也存在较多问题并 很快被EXT2文件系统所替代</p>
+<h2 id="EXT2"><a href="#EXT2" class="headerlink" title="EXT2"></a>EXT2</h2><p>EXT2的元数据结构跟EXT是一样的，但是它更具前瞻性，因为它预留了较多空间供元数据使用。和Minix一样，EXT的第一个扇区也是<code>boot sector</code>。一个EXT2上的空间会被切分成多个块组进行管理（一个块组通常是8MB，块组也叫柱面组，基于柱面做分组能有效降低旋转时间），如下所示为一个块组的基本结构，其中数据分配的基本单元为块，一个块的大小通常为4K：</p>
+<p>一个块组的第一个块为<code>superblock</code>，其中存储的都是整个文件系统的元数据，如果元数据损坏，可以通过dd将备份超级快复制过来进行修复。通常这部分元数据都会备份存储在多个块组上用以提高系统可用性。ext4的驱动在工作时都是查询和修改第一个块组内存储的元数据，<code>dumpe2fs</code>可以查看superblock中的元数据：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br></pre></td><td class="code"><pre><span class="line"># dumpe2fs /dev/sda1</span><br><span class="line">Filesystem volume name:   boot </span><br><span class="line">Last mounted on:          /boot </span><br><span class="line">Filesystem UUID:          <span class="number">79f</span>c5ed8<span class="number">-5b</span>bc<span class="number">-4</span>dfe<span class="number">-8359</span>-b7b36be6eed3 </span><br><span class="line">Filesystem magic number:  <span class="number">0xEF53</span> </span><br><span class="line">Filesystem revision #:    <span class="number">1</span> (dynamic) </span><br><span class="line">Filesystem features:      has_journal ext_attr resize_inode dir_index filetype needs_recovery extent <span class="number">64b</span>it flex_bg sparse_super large_file huge_file dir nlink extra_isize </span><br><span class="line">Filesystem flags:         signed_directory_hash </span><br><span class="line">Default mount options:    user_xattr acl </span><br><span class="line">Filesystem state:         clean </span><br><span class="line">Errors behavior:          Continue </span><br><span class="line">Filesystem OS type:       Linux </span><br><span class="line">Inode count:              <span class="number">122160</span> </span><br><span class="line">Block count:              <span class="number">488192</span> </span><br><span class="line">Reserved block count:     <span class="number">24409</span> </span><br><span class="line">Free blocks:              <span class="number">376512</span> </span><br><span class="line">Free inodes:              <span class="number">121690</span> </span><br><span class="line">First block:              <span class="number">0</span> </span><br><span class="line">Block size:               <span class="number">4096</span> </span><br><span class="line">Fragment size:            <span class="number">4096</span> </span><br><span class="line">Group descriptor size:    <span class="number">64</span> </span><br><span class="line">Reserved GDT blocks:      <span class="number">238</span> </span><br><span class="line">Blocks per group:         <span class="number">32768</span> </span><br><span class="line">Fragments per group:      <span class="number">32768</span> </span><br><span class="line">Inodes per group:         <span class="number">8144</span> </span><br><span class="line">Inode blocks per group:   <span class="number">509</span> </span><br><span class="line">Flex block group size:    <span class="number">16</span> </span><br><span class="line">Filesystem created:       Tue Feb  <span class="number">7</span> <span class="number">09</span>:<span class="number">33</span>:<span class="number">34</span> <span class="number">2017</span> </span><br><span class="line">Last mount time:          Sat Apr <span class="number">29</span> <span class="number">21</span>:<span class="number">42</span>:<span class="number">01</span> <span class="number">2017</span> </span><br><span class="line">Last write time:          Sat Apr <span class="number">29</span> <span class="number">21</span>:<span class="number">42</span>:<span class="number">01</span> <span class="number">2017</span> </span><br><span class="line">Mount count:              <span class="number">25</span> </span><br><span class="line">Maximum mount count:      <span class="number">-1</span> </span><br><span class="line">Last checked:             Tue Feb  <span class="number">7</span> <span class="number">09</span>:<span class="number">33</span>:<span class="number">34</span> <span class="number">2017</span> </span><br><span class="line">Check interval:           <span class="number">0</span> (&lt;none&gt;) </span><br><span class="line">Lifetime writes:          <span class="number">594</span> MB </span><br><span class="line">Reserved blocks uid:      <span class="number">0</span> (user root) </span><br><span class="line">Reserved blocks gid:      <span class="number">0</span> (group root) </span><br><span class="line">First inode:              <span class="number">11</span> </span><br><span class="line">Inode size:               <span class="number">256</span> </span><br><span class="line">Required extra isize:     <span class="number">32</span> </span><br><span class="line">Desired extra isize:      <span class="number">32</span> </span><br><span class="line">Journal inode:            <span class="number">8</span> </span><br><span class="line">Default directory hash:   half_md4 </span><br><span class="line">Directory Hash Seed:      c780bac9-d4bf<span class="number">-4f</span>35-b695<span class="number">-0f</span>e35e8d2d60 </span><br><span class="line">Journal backup:           inode blocks </span><br><span class="line">Journal features:         journal_64bit </span><br><span class="line">Journal size:             <span class="number">32</span>M </span><br><span class="line">Journal length:           <span class="number">8192</span> </span><br><span class="line">Journal sequence:         <span class="number">0x00000213</span> </span><br><span class="line">Journal start:            <span class="number">0</span> </span><br><span class="line"></span><br><span class="line"></span><br><span class="line">Group <span class="number">0</span>: (Blocks <span class="number">0</span><span class="number">-32767</span>) </span><br><span class="line"> Primary superblock at <span class="number">0</span>, Group descriptors at <span class="number">1</span><span class="number">-1</span> </span><br><span class="line"> Reserved GDT blocks at <span class="number">2</span><span class="number">-239</span> </span><br><span class="line"> Block bitmap at <span class="number">240</span> (+<span class="number">240</span>) </span><br><span class="line"> Inode bitmap at <span class="number">255</span> (+<span class="number">255</span>) </span><br><span class="line"> Inode table at <span class="number">270</span><span class="number">-778</span> (+<span class="number">270</span>) </span><br><span class="line"> <span class="number">24839</span> <span class="built_in">free</span> blocks, <span class="number">7676</span> <span class="built_in">free</span> inodes, <span class="number">16</span> directories </span><br><span class="line"> Free blocks: <span class="number">7929</span><span class="number">-32767</span> </span><br><span class="line"> Free inodes: <span class="number">440</span>, <span class="number">470</span><span class="number">-8144</span> </span><br><span class="line">Group <span class="number">1</span>: (Blocks <span class="number">32768</span><span class="number">-65535</span>) </span><br><span class="line"> Backup superblock at <span class="number">32768</span>, Group descriptors at <span class="number">32769</span><span class="number">-32769</span> </span><br><span class="line"> Reserved GDT blocks at <span class="number">32770</span><span class="number">-33007</span> </span><br><span class="line"> Block bitmap at <span class="number">241</span> (bg #<span class="number">0</span> + <span class="number">241</span>) </span><br><span class="line"> Inode bitmap at <span class="number">256</span> (bg #<span class="number">0</span> + <span class="number">256</span>)</span><br><span class="line"> Inode table at <span class="number">779</span><span class="number">-1287</span> (bg #<span class="number">0</span> + <span class="number">779</span>) </span><br><span class="line"> <span class="number">8668</span> <span class="built_in">free</span> blocks, <span class="number">8142</span> <span class="built_in">free</span> inodes, <span class="number">2</span> directories </span><br><span class="line"> Free blocks: <span class="number">33008</span><span class="number">-33283</span>, <span class="number">33332</span><span class="number">-33791</span>, <span class="number">33974</span><span class="number">-33975</span>, <span class="number">34023</span><span class="number">-34092</span>, <span class="number">34094</span><span class="number">-34104</span>, <span class="number">34526</span><span class="number">-34687</span>, <span class="number">34706</span><span class="number">-34723</span>, <span class="number">34817</span><span class="number">-35374</span>, <span class="number">35421</span><span class="number">-35844</span>, <span class="number">35935</span><span class="number">-36355</span>, <span class="number">36357</span><span class="number">-36863</span>, <span class="number">38912</span><span class="number">-39935</span>, <span class="number">39940</span><span class="number">-40570</span>, <span class="number">42620</span><span class="number">-42623</span>, <span class="number">42655</span>, <span class="number">42674</span><span class="number">-42687</span>, <span class="number">42721</span><span class="number">-42751</span>, <span class="number">42798</span><span class="number">-42815</span>, <span class="number">42847</span>, <span class="number">42875</span><span class="number">-42879</span>, <span class="number">42918</span><span class="number">-42943</span>, <span class="number">42975</span>, <span class="number">43000</span><span class="number">-43007</span>, <span class="number">43519</span>, <span class="number">43559</span><span class="number">-44031</span>, <span class="number">44042</span><span class="number">-44543</span>, <span class="number">44545</span><span class="number">-45055</span>, <span class="number">45116</span><span class="number">-45567</span>, <span class="number">45601</span><span class="number">-45631</span>, <span class="number">45658</span><span class="number">-45663</span>, <span class="number">45689</span><span class="number">-45695</span>, <span class="number">45736</span><span class="number">-45759</span>, <span class="number">45802</span><span class="number">-45823</span>, <span class="number">45857</span><span class="number">-45887</span>, <span class="number">45919</span>, <span class="number">45950</span><span class="number">-45951</span>, <span class="number">45972</span><span class="number">-45983</span>, <span class="number">46014</span><span class="number">-46015</span>, <span class="number">46057</span><span class="number">-46079</span>, <span class="number">46112</span><span class="number">-46591</span>, <span class="number">46921</span><span class="number">-47103</span>, <span class="number">49152</span><span class="number">-49395</span>, <span class="number">50027</span><span class="number">-50355</span>, <span class="number">52237</span><span class="number">-52255</span>, <span class="number">52285</span><span class="number">-52287</span>, <span class="number">52323</span><span class="number">-52351</span>, <span class="number">52383</span>, <span class="number">52450</span><span class="number">-52479</span>, <span class="number">52518</span><span class="number">-52543</span>, <span class="number">52584</span><span class="number">-52607</span>, <span class="number">52652</span><span class="number">-52671</span>, <span class="number">52734</span><span class="number">-52735</span>, <span class="number">52743</span><span class="number">-53247</span> </span><br><span class="line"> Free inodes: <span class="number">8147</span><span class="number">-16288</span> </span><br><span class="line">Group <span class="number">2</span>: (Blocks <span class="number">65536</span><span class="number">-98303</span>) </span><br><span class="line"> Block bitmap at <span class="number">242</span> (bg #<span class="number">0</span> + <span class="number">242</span>) </span><br><span class="line"> Inode bitmap at <span class="number">257</span> (bg #<span class="number">0</span> + <span class="number">257</span>) </span><br><span class="line"> Inode table at <span class="number">1288</span><span class="number">-1796</span> (bg #<span class="number">0</span> + <span class="number">1288</span>) </span><br><span class="line"> <span class="number">6326</span> <span class="built_in">free</span> blocks, <span class="number">8144</span> <span class="built_in">free</span> inodes, <span class="number">0</span> directories </span><br><span class="line"> Free blocks: <span class="number">67042</span><span class="number">-67583</span>, <span class="number">72201</span><span class="number">-72994</span>, <span class="number">80185</span><span class="number">-80349</span>, <span class="number">81191</span><span class="number">-81919</span>, <span class="number">90112</span><span class="number">-94207</span> </span><br><span class="line"> Free inodes: <span class="number">16289</span><span class="number">-24432</span> </span><br><span class="line">Group <span class="number">3</span>: (Blocks <span class="number">98304</span><span class="number">-131071</span>)</span><br><span class="line"></span><br><span class="line">&lt;snip&gt;</span><br></pre></td></tr></table></figure>
+<p>此外每个块组可能会有一小段的预留空间用来存组描述符（GDT），每个块组有自己的inode和block位图用以管理自身的inode和block，所以一个EXT2的磁盘结构如下所示：</p>
+<p><img src="/images/19.png" alt=""></p>
+<p>EXT2的最大问题就是在发生奔溃后需要花费较长时间才能恢复，因为fsck需要花费很长时间修复文件系统中的不一致问题。</p>
+<h2 id="EXT3"><a href="#EXT3" class="headerlink" title="EXT3"></a>EXT3</h2><p>ETX3最终要的修改就是引入了日志来解决ETX2恢复时间较长的问题，日志里记录了文件系统上最近的修改。此时，数据不是直接写入磁盘数据区，而是先写入日志中，当数据正在持久化后，就可以回收日志。当文件系统奔溃后，通过回放日志就可以恢复文件系统，避免数据丢失。显而易见的是，引入日志虽然提高了数据的可靠性，但是会带来性能的下降，所以EXT3也提供了选项供用户在数据可靠性和性能之间做平衡。</p>
+<h2 id="EXT4"><a href="#EXT4" class="headerlink" title="EXT4"></a>EXT4</h2><p>EXT4主要是提升了文件系统整体的性能、可靠性及容量。为了提高可靠性，加入了元数据和日志的校验。此外，ext4在提升文件的连续性上也做了非常多的工作，如extent的引入、更加合理的block、inode分配策略等。数据分配的基本单元由block变为extent了，一个extent是磁盘上的一段连续空间，extent的引入使得一个inode能使用更少的数据指针描述一个物理上连续的大文件，在有效提升单个文件的最大尺寸的同时有效减少文件元数据的大小。<br>此外，EXT4也引入了一些其他分配策略来提升文件的连续性，降低文件内部的碎片，主要如下：</p>
+<ul>
+<li>将新创建的文件分散到磁盘上来减少磁盘碎片，而不是将文件都集中在磁盘开头部分</li>
+<li>文件分配算法会尽量将文件随机分布到块组上，同时尽量保持同一文件的extent处以同一块组，extents间尽可能靠近，从而缩短寻道和旋转时间</li>
+<li>采用预分配策略来创建新文件，同时新文件不会紧跟现有文件，防止现有文件的碎片较多<br>需要注意的是，文件内部碎片的这么优化可能会导致整体磁盘空间碎片的增加，这也需要做一个权衡。</li>
+</ul>
+<p>下面来详细看看EXT4的主要结构。</p>
+<h3 id="Super-Block"><a href="#Super-Block" class="headerlink" title="Super Block"></a>Super Block</h3><p>SuperBlock中记录了整个文件系统的元数据，如block数目、inode数目、block group的情况等，superblock如果彻底损坏会导致整个文件系统不可用，在初始化的时候我们可以指定是否需要将superblock备份到每个block group上。</p>
+<h3 id="Block-Group-Descriptor"><a href="#Block-Group-Descriptor" class="headerlink" title="Block Group Descriptor"></a>Block Group Descriptor</h3><p>每个block group都有一个描述符与之对应，一般情况下每个block group内都会存储GDT的备份，但是在初始化的时候也可以指定是否需要将superblock和GDT备份到全部block group上，如果一个block group不含有这部分元数据，则该group一般就是从bitmap开始存储。一个block group descriptor记录该group中bitmap和inode table的位置信息，需要注意的是，一个group内位置固定的只有它的元数据（superblock和GDT），bitmap和inode的位置都部署固定的，这样便于将多个block group和成一个logic block group使用。</p>
+<h3 id="Block-and-inode-Bitmaps"><a href="#Block-and-inode-Bitmaps" class="headerlink" title="Block and inode Bitmaps"></a>Block and inode Bitmaps</h3><p>block bitmap记录了group内block的使用情况，inode记录了group内inode的使用情况。</p>
+<h3 id="Inode-Table"><a href="#Inode-Table" class="headerlink" title="Inode Table"></a>Inode Table</h3><p>Inode table会占用多个block来存储inode实例，每个inode实例对应系统上的一个文件。每个inode的id是全局唯一的，从1开始分配，同时每个group内inode的数目都是固定的（<code>sb-&gt;s_inodes_per_group</code>），所以通过(inode_num-1/ sb-&gt;s_inodes_per_group)就知道 一个inode位于哪个group之内。</p>
+<h3 id="Inode"><a href="#Inode" class="headerlink" title="Inode"></a>Inode</h3><p>如前文所述，一个inode对应于一个文件，每个inode都有个局部唯一性ID，用以存储该文件的元数据以及数据块指针，它的结构如下所示：</p>
+<p><img src="/images/20.png" alt=""></p>
+<p>通常情况下，文件的碎片率不会不会很高，所以通常以及直接指针就够用了。在ext4中，inode的size是可以在初始化的时候指定的，我们可以利用更大的inode size来存储部分额外的用户元数据，这样能有效提升用户元数据的存储效率。</p>
+<p>需要特别注意的是，一个inode是不包含文件名的，文件的访问需要通过<code>directory entry</code>来进行，下面来看目录项的具体内容。</p>
+<h3 id="Directory-Entries"><a href="#Directory-Entries" class="headerlink" title="Directory Entries"></a>Directory Entries</h3><p>在ext4中，一个目录也是作为一个文件来管理，它的文件内容就是该目录下文件和其inode的对应关系，所以我们在访问一个文件时，都要先通过该文件所在目录的<code>directory entry</code>来获取到该文件的inode，这样才能访问该文件。。</p>
+<p>通常情况下，一个目录项是以一种线性的方式来list它的所有entry的，当一个目录下存储的文件数过多的话，对应的<code>directory entry</code>就会非常大，这也是为什么ls一个大目录的时候需要很久才能返回结果。基于此考虑，ext3还引入<code>hash tree</code>的结构来存储一个目录的所有entry，如果<code>EXT4_INDEX_FL</code>这个flag在inode中设置了的话，对应的目录就是用这种<code>hash tree</code>的结构来组织和查找它的entries。</p>
+<h3 id="Journal"><a href="#Journal" class="headerlink" title="Journal"></a>Journal</h3><p>journal是在ext3引入的，用以提升文件系统的可靠性，防止系统奔溃导致文件系统的损坏。在修改系统内的重要数据之前，会先写入日志，待写入的数据持久化存储后，可以将对应的记录从日志中删除，当系统发生奔溃时，通过重放日志即可恢复数据。基于性能方面的考虑，默认情况下，ext4只有在修改元数据的时候才会写入日志，用户数据的修改是不会写入日志的，这个行为在挂载时也可以修改。如果默认的保护级别(<code>data=ordered</code>)不足，通过<code>data=journal</code>可以使所有数据在修改时都要写入日志中，这种方式虽然更安全，但是性能也会下降。</p>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li><a href="https://opensource.com/article/17/5/introduction-ext4-filesystem" target="_blank" rel="noopener">An introduction to Linux’s EXT4 filesystem</a></li>
+</ul>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/07/19/paxos-raft/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -1825,192 +1982,6 @@
 
 
     
-      
-
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/03/07/hardware-architecture/">
-
-    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Leeshine">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/avatar.gif">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Leesine's Blog">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2019/03/07/hardware-architecture/" itemprop="url">内存知识之现代商用硬件架构</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">Posted on</span>
-              
-              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-03-07T20:29:13+08:00">
-                2019-03-07
-              </time>
-            
-
-            
-
-            
-          </span>
-
-          
-
-          
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          
-            <h2 id="CPU架构"><a href="#CPU架构" class="headerlink" title="CPU架构"></a>CPU架构</h2><p>早期时，个人电脑及小型服务器的架构如下：所有CPU之间是通过FSB（Front Side Bus， FSB）进行相互连接，并通过它来连接北桥，北桥连接高速设备（如主存等），通过北桥可以连接南桥，南迁连接低速设备（如硬盘、外设等）。</p>
-<p><img src="/images/linux-memory/pic1.png" alt=""></p>
-<p>这样的架构有这样一些特点：</p>
-<ul>
-<li>CPU之间的交互需要共用连接比较的总线（FSB）</li>
-<li>每个RAM只有一个接口</li>
-<li>CPU同主存之间的交互要通过北桥</li>
-<li>CPU同南桥上的设备间的交互必须通过北桥</li>
-</ul>
-<p>这样的一个架构容易引入这样一些瓶颈：</p>
-<ul>
-<li>第一个瓶颈是对RAM的访问。早期时，所有设备的交互都要通过CPU来进行，这样会严重影响整个系统的性能。为了解决这个问题，直接内存访问（DMA，direct memory access ）技术被发明出来了，DMA允许外设通过北桥直接同RAM进行交互。这样能极大降低CPU负载，提升系统整体性能。</li>
-<li>第二个瓶颈是通过从北桥连接RAM的总线。早期时系统是通过一条总线来连接所有RAM，所以无法并行访问内存，最近的RAM都支持多条总线连接来提升内存访问带宽</li>
-</ul>
-<p>但内存访问带宽受限时，合理安排内存访问顺序对于提升系统性能是非常重要的。众所周知，即使使用了CPU缓存后，CPU的运行速度（内部寄存器的访问速度）也比主存的访问速度快多了。如果多个线程、CPU核心、CPU处理器同时访问某块内存，那么整体的内存访问延迟是很高的。在一些现代系统中，在北桥上不是直接连接RAM，而是会连接一些外部内存分配器，如下所示：</p>
-<p><img src="/images/linux-memory/pic2.png" alt=""></p>
-<p>这个架构的好处是有多个内存总线存在，能提升整体的内存访问带宽，同时能提升系统的内存总量，并且通过访问不同内存条的方式可以降低并发内存访问的延迟。此时，系统的整体内存访问带宽主要受限于北桥的传输速度，这即使传统SMP（对称多核处理器）架构。</p>
-<p>在北桥之间接入多个外部内存分配器并不是提升内存访问带宽的唯一方法，在一些系统中，内存分配器被放入CPU中，内存条也是直连每个CPU的，如下所示：</p>
-<p><img src="/images/linux-memory/pic3.png" alt=""></p>
-<p>这就是NUMA（非均匀性内存访问）架构，采用这种架构也有这样的问题：</p>
-<ul>
-<li>内存访问不再是对称的，本地内存还能以正常的速度访问，然而访问其他处理的内存需要通过对应的CPU来进行交互，这样会导致访问远程内存的速度较慢</li>
-</ul>
-<h2 id="存储器"><a href="#存储器" class="headerlink" title="存储器"></a>存储器</h2><h3 id="随机访问存储器（RAM）"><a href="#随机访问存储器（RAM）" class="headerlink" title="随机访问存储器（RAM）"></a>随机访问存储器（RAM）</h3><p>RAM分为两类：静态随机访问存储器（SRAM）和动态随机访问存储器（DRAM）。SRAM比DRAM访问速度快得多，但也更加昂贵，SRAM通常都是用来做高速缓存，DRAM通常用来做主存。SRAM与DRAM都是易失性存储，只要断电，其中存储的数据便会丢失。</p>
-<h3 id="磁盘"><a href="#磁盘" class="headerlink" title="磁盘"></a>磁盘</h3><p>磁盘是应用最广的数据存储设备，容量比RAM大得多，但是访问延迟也高。从磁盘读取信息时间为ms级别，DRAM的访问速度比磁盘快10万倍，而SRAM比磁盘快100万倍。</p>
-<p>磁盘是由盘片构成的，每个盘片有两面被称之为表面，盘片中央有一个可旋转的主轴，盘片以固定速率围绕主轴旋转，如下图所示展示了一个典型的磁盘结构：</p>
-<p><img src="/images/linux-memory/pic6.png" alt=""></p>
-<p>每个表面由一组称为磁道的同心圆组成，每个磁道被划分为一组扇区，扇区间由间隙隔开，扇区是磁盘存储的最小单位，柱面是所有表面上到主轴距离相等的磁道的集合。</p>
-<p>磁盘以扇区为基本单位，使用磁头来读写盘面上的数据，对扇区的访问时间主要由一下三个部分组成：</p>
-<ul>
-<li>寻道时间：磁头移动到目标扇区所在磁道的位置</li>
-<li>旋转时间：盘面旋转将目标扇区转到到磁头下</li>
-<li>传送时间：磁头读取扇区中的数据</li>
-</ul>
-<p>相对来说，传送时间远小于寻道时间和旋转时间，这也是为什么硬盘的顺序读写要比随机读写速度快得多。因为寻道时间和旋转时间大致是相等的，所以将寻道时间乘于2是估计磁盘访问时间的简单办法。</p>
-<h3 id="固态硬盘（ssd）"><a href="#固态硬盘（ssd）" class="headerlink" title="固态硬盘（ssd）"></a>固态硬盘（ssd）</h3><p>固态硬盘是一种基于闪存的技术，相对磁盘来说，ssd上随机访问的速度较顺序访问的速度不会相差太多。</p>
-<h2 id="各级存储设备访问延迟"><a href="#各级存储设备访问延迟" class="headerlink" title="各级存储设备访问延迟"></a>各级存储设备访问延迟</h2><p>以一个CPU时钟周期为单位，各级设备的访问延迟如下：</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">设备</th>
-<th style="text-align:center">延迟（时钟周期）</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center">L1</td>
-<td style="text-align:center">2~3</td>
-</tr>
-<tr>
-<td style="text-align:center">L2</td>
-<td style="text-align:center">15</td>
-</tr>
-<tr>
-<td style="text-align:center">L3</td>
-<td style="text-align:center">30~40</td>
-</tr>
-<tr>
-<td style="text-align:center">Memory</td>
-<td style="text-align:center">100~200</td>
-</tr>
-<tr>
-<td style="text-align:center">Disk</td>
-<td style="text-align:center">1亿~2亿（30ms）左右</td>
-</tr>
-</tbody>
-</table>
-
-          
-        
-      
-    </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
   </section>
 
   
@@ -2061,7 +2032,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">19</span>
+                  <span class="site-state-item-count">20</span>
                   <span class="site-state-item-name">posts</span>
                 </a>
               </div>
@@ -2074,7 +2045,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">13</span>
+                  <span class="site-state-item-count">17</span>
                   <span class="site-state-item-name">tags</span>
                 </a>
               </div>
